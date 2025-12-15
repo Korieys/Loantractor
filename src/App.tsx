@@ -65,11 +65,23 @@ function App() {
     }
   };
 
-  const handleSave = (data: typeof MOCK_EXTRACTION_DATA) => {
-    console.log("Saved data:", data);
-    // TODO: Save to Supabase DB here in the future
-    alert("Data saved successfully! (Console log)");
-    reset();
+  const handleSave = async (data: typeof MOCK_EXTRACTION_DATA) => {
+    if (!session?.user || !currentFile || !docType) return;
+
+    try {
+      setStatus('PROCESSING'); // Re-use processing state or add a SAVING state
+
+      const { uploadDocument } = await import('./services/supabase');
+      await uploadDocument(currentFile, docType, data, session.user.id);
+
+      alert("Document saved successfully!");
+      reset();
+    } catch (err) {
+      console.error("Save failed:", err);
+      // alert("Failed to save document. Please try again.");
+      setErrorMsg("Failed to save document to Supabase.");
+      setStatus('ERROR');
+    }
   };
 
   const reset = () => {
