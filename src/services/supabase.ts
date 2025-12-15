@@ -48,3 +48,19 @@ export async function uploadDocument(
         throw error;
     }
 }
+
+export async function getUserDocuments(userId: string) {
+    const { data, error } = await supabase
+        .from('documents')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false });
+
+    if (error) {
+        console.error('Error fetching documents:', error);
+        throw error;
+    }
+
+    return data;
+}
+
