@@ -1,16 +1,40 @@
 import { FileText, Search, Filter } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 
-// Mock data for documents
-const MOCK_DOCUMENTS = [
-    { id: 1, name: 'Loan Estimate - John Doe.pdf', type: 'Loan Estimate', date: '2025-05-15', status: 'Verified' },
-    { id: 2, name: 'Pay Stub - Jane Smith.pdf', type: 'Pay Stub', date: '2025-05-14', status: 'Pending Review' },
-    { id: 3, name: 'Bank Statement - Mar 2025.pdf', type: 'Bank Statement', date: '2025-05-12', status: 'Verified' },
-    { id: 4, name: 'Tax Return 2024.pdf', type: 'Tax Return', date: '2025-05-10', status: 'Processing' },
-    { id: 5, name: 'Closing Disclosure - Refi.pdf', type: 'Closing Disclosure', date: '2025-05-08', status: 'Verified' },
-];
+// ... imports
+import { useEffect, useState } from 'react';
+import { supabase, getUserDocuments } from '../services/supabase';
+
+interface Document {
+    id: string;
+    doc_type: string;
+    created_at: string;
+    file_path: string;
+    extracted_data: any;
+}
 
 export function DocumentsPage() {
+    const [documents, setDocuments] = useState<Document[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
+
+    useEffect(() => {
+        loadDocuments();
+    }, []);
+
+    const loadDocuments = async () => {
+        try {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (session?.user) {
+                const docs = await getUserDocuments(session.user.id);
+                setDocuments(docs || []);
+            }
+        } catch (error) {
+            console.error(error);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
     return (
         <div className="space-y-6">
             <header className="flex justify-between items-center">
@@ -53,29 +77,32 @@ export function DocumentsPage() {
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                        {MOCK_DOCUMENTS.map((doc) => (
-                            <tr key={doc.id} className="hover:bg-slate-50 transition-colors">
-                                <td className="px-6 py-4 font-medium text-slate-800 flex items-center gap-3">
-                                    <div className="w-8 h-8 rounded bg-primary/10 text-primary flex items-center justify-center">
-                                        <FileText size={16} />
-                                    </div>
-                                    {doc.name}
-                                </td>
-                                <td className="px-6 py-4 text-slate-600">{doc.type}</td>
-                                <td className="px-6 py-4 text-slate-600">{doc.date}</td>
-                                <td className="px-6 py-4">
-                                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${doc.status === 'Verified' ? 'bg-green-100 text-green-800' :
-                                            doc.status === 'Processing' ? 'bg-blue-100 text-blue-800' :
-                                                'bg-amber-100 text-amber-800'
-                                        }`}>
-                                        {doc.status}
-                                    </span>
-                                </td>
-                                <td className="px-6 py-4 text-right">
-                                    <button className="text-primary hover:text-primary/80 font-medium text-sm">View</button>
-                                </td>
-                            </tr>
-                        ))}
+                        {isLoading ? (
+                            <tr><td colSpan={5} className="p-8 text-center text-slate-500">Loading documents...</td></tr>
+                        ) : documents.length === 0 ? (
+                            <tr><td colSpan={5} className="p-8 text-center text-slate-500">No documents found. Upload one to get started!</td></tr>
+                        ) : (
+                            documents.map((doc) => (
+                                <tr key={doc.id} className="hover:bg-slate-50 transition-colors">
+                                    <td className="px-6 py-4 font-medium text-slate-800 flex items-center gap-3">
+                                        <div className="w-8 h-8 rounded bg-primary/10 text-primary flex items-center justify-center">
+                                            <FileText size={16} />
+                                        </div>
+                                        {doc.file_path.split('/').pop()}
+                                    </td>
+                                    <td className="px-6 py-4 text-slate-600">{doc.doc_type || 'Unknown'}</td>
+                                    <td className="px-6 py-4 text-slate-600">{new Date(doc.created_at).toLocaleDateString()}</td>
+                                    <td className="px-6 py-4">
+                                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                            Processed
+                                        </span>
+                                    </td>
+                                    <td className="px-6 py-4 text-right">
+                                        <button className="text-primary hover:text-primary/80 font-medium text-sm">View</button>
+                                    </td>
+                                </tr>
+                            ))
+                        )}
                     </tbody>
                 </table>
             </div>
