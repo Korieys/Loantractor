@@ -1,4 +1,4 @@
-import { MOCK_EXTRACTION_DATA } from "../data/mockExtraction";
+
 
 interface ExtractedData {
     field: string;
