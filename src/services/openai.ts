@@ -1,7 +1,5 @@
 import { MOCK_EXTRACTION_DATA } from "../data/mockExtraction";
 
-const API_KEY = import.meta.env.VITE_OPENAI_API_KEY;
-
 interface ExtractedData {
     field: string;
     value: string;
@@ -56,10 +54,6 @@ const fileToBase64 = (file: File): Promise<string> => {
 };
 
 export async function extractLoanData(file: File, docType: string = "Generic Loan Document"): Promise<ExtractedData[]> {
-    if (!API_KEY) {
-        console.error("Missing API Key, using mock data");
-        return new Promise(resolve => setTimeout(() => resolve(MOCK_EXTRACTION_DATA), 2000));
-    }
 
     // Dynamic instructions based on document type
     let specificInstructions = "";
@@ -82,11 +76,11 @@ export async function extractLoanData(file: File, docType: string = "Generic Loa
     try {
         const base64Image = await fileToBase64(file);
 
-        const response = await fetch("https://api.openai.com/v1/chat/completions", {
+        // Call our own secure Proxy (Netlify Function) instead of OpenAI directly
+        const response = await fetch("/.netlify/functions/openai-proxy", {
             method: "POST",
             headers: {
-                "Content-Type": "application/json",
-                "Authorization": `Bearer ${API_KEY}`
+                "Content-Type": "application/json"
             },
             body: JSON.stringify({
                 model: "gpt-4o",
@@ -114,7 +108,11 @@ export async function extractLoanData(file: File, docType: string = "Generic Loa
         });
 
         if (!response.ok) {
-            throw new Error(`OpenAI API Error: ${response.statusText}`);
+            console.warn("Proxy call failed, falling back to mock data if dev/preview");
+            // If proxy fails (e.g. running locally without netlify dev), throw to allow UI to handle
+            // or return mock data as absolute fallback for demo purposes
+            const errorText = await response.text();
+            throw new Error(`Proxy Error: ${response.status} ${errorText}`);
         }
 
         const data = await response.json();
@@ -147,7 +145,6 @@ export async function extractLoanData(file: File, docType: string = "Generic Loa
 
     } catch (error) {
         console.error("Extraction Failed:", error);
-        // Fallback or rethrow
         throw error;
     }
 }
