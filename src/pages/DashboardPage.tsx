@@ -10,7 +10,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { logger } from '../services/logger';
 import { supabase } from '../services/supabase';
 
-type AppState = 'IDLE' | 'SELECT_TYPE' | 'PROCESSING' | 'REVIEW' | 'ERROR';
+type AppState = 'IDLE' | 'SELECT_TYPE' | 'PROCESSING' | 'SAVING' | 'REVIEW' | 'ERROR';
 
 export function DashboardPage() {
     const [status, setStatus] = useState<AppState>('IDLE');
@@ -52,7 +52,7 @@ export function DashboardPage() {
         }
 
         try {
-            setStatus('PROCESSING');
+            setStatus('SAVING');
 
             const { uploadDocument } = await import('../services/supabase');
             await uploadDocument(currentFile, docType, data, session.user.id);
@@ -82,6 +82,7 @@ export function DashboardPage() {
                         {status === 'IDLE' && "New Extraction"}
                         {status === 'SELECT_TYPE' && "Classify Document"}
                         {status === 'PROCESSING' && "Processing Document"}
+                        {status === 'SAVING' && "Saving Data"}
                         {status === 'REVIEW' && (docType ? `Review ${docType} Data` : "Review Data")}
                         {status === 'ERROR' && "Processing Error"}
                     </h2>
@@ -89,6 +90,7 @@ export function DashboardPage() {
                         {status === 'IDLE' && "Upload a borrower document to automatically extract data."}
                         {status === 'SELECT_TYPE' && "Select the type of document you uploaded."}
                         {status === 'PROCESSING' && "Please wait while our AI analyzes your document..."}
+                        {status === 'SAVING' && "Securing your data in the database..."}
                         {status === 'REVIEW' && "Verify the extracted information against the document."}
                         {status === 'ERROR' && "Something went wrong during extraction."}
                     </p>
@@ -118,14 +120,14 @@ export function DashboardPage() {
                     </motion.div>
                 )}
 
-                {status === 'PROCESSING' && (
+                {(status === 'PROCESSING' || status === 'SAVING') && (
                     <motion.div
                         key="processing"
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
                     >
-                        <ProcessingLoader />
+                        <ProcessingLoader mode={status === 'SAVING' ? 'saving' : 'analyzing'} />
                     </motion.div>
                 )}
 
