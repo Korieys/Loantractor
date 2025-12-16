@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion'
-import { Scan, FileText, Loader2, Save, CheckCircle } from 'lucide-react'
+import { Scan, FileText, Loader2, Save } from 'lucide-react'
 
 interface ProcessingLoaderProps {
     mode?: 'analyzing' | 'saving';
