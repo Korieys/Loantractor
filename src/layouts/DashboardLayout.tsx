@@ -15,7 +15,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
             <aside className="w-64 bg-white border-r border-slate-200 hidden md:flex flex-col">
                 <div className="p-6">
                     <h2 className="text-2xl font-bold text-primary flex items-center gap-2">
-                        Loantractor
+                        Parseon
                     </h2>
                 </div>
 
