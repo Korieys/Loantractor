@@ -1,5 +1,5 @@
 import { Button } from "../components/ui/Button";
-import { ArrowRight, CheckCircle2, Shield, Zap, FileText, Sparkles, BrainCircuit } from 'lucide-react';
+import { ArrowRight, Shield, Zap, FileText, Sparkles, BrainCircuit } from 'lucide-react';
 import { motion, useScroll, useTransform } from 'framer-motion';
 import { useRef } from "react";
 

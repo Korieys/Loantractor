@@ -20,7 +20,6 @@ export function SettingsPage() {
     const loadProfile = async () => {
         const { data: { user } } = await supabase.auth.getUser();
         if (user) {
-            setUser(user);
             setEmail(user.email || '');
             setFirstName(user.user_metadata?.first_name || '');
             setLastName(user.user_metadata?.last_name || '');
