@@ -7,6 +7,8 @@ import { extractLoanData } from '../services/openai';
 import { ExtractionViewer } from '../components/features/ExtractionViewer';
 import { ProcessingLoader } from '../components/features/ProcessingLoader';
 import { AnimatePresence, motion } from 'framer-motion';
+import { logger } from '../services/logger';
+import { supabase } from '../services/supabase';
 
 type AppState = 'IDLE' | 'SELECT_TYPE' | 'PROCESSING' | 'REVIEW' | 'ERROR';
 
@@ -34,16 +36,34 @@ export function DashboardPage() {
             setExtractedData(data);
             setStatus('REVIEW');
         } catch (err) {
-            console.error(err);
+            logger.error(err);
             setErrorMsg("Failed to process document. Please try again.");
             setStatus('ERROR');
         }
     };
 
-    const handleSave = (data: typeof MOCK_EXTRACTION_DATA) => {
-        console.log("Saved data:", data);
-        alert("Data saved successfully! (Console log)");
-        reset();
+    const handleSave = async (data: typeof MOCK_EXTRACTION_DATA) => {
+        // Need user session for upload
+        const { data: { session } } = await supabase.auth.getSession();
+
+        if (!session?.user || !currentFile || !docType) {
+            logger.error("Missing session or file data for save");
+            return;
+        }
+
+        try {
+            setStatus('PROCESSING');
+
+            const { uploadDocument } = await import('../services/supabase');
+            await uploadDocument(currentFile, docType, data, session.user.id);
+
+            alert("Document saved successfully!");
+            reset();
+        } catch (err) {
+            logger.error("Save failed:", err);
+            setErrorMsg("Failed to save document to Supabase.");
+            setStatus('ERROR');
+        }
     };
 
     const reset = () => {
@@ -56,21 +76,23 @@ export function DashboardPage() {
 
     return (
         <div className="space-y-6">
-            <header>
-                <h2 className="text-2xl font-bold text-slate-800">
-                    {status === 'IDLE' && "New Extraction"}
-                    {status === 'SELECT_TYPE' && "Classify Document"}
-                    {status === 'PROCESSING' && "Processing Document"}
-                    {status === 'REVIEW' && (docType ? `Review ${docType} Data` : "Review Data")}
-                    {status === 'ERROR' && "Processing Error"}
-                </h2>
-                <p className="text-slate-500">
-                    {status === 'IDLE' && "Upload a borrower document to automatically extract data."}
-                    {status === 'SELECT_TYPE' && "Select the type of document you uploaded."}
-                    {status === 'PROCESSING' && "Please wait while our AI analyzes your document..."}
-                    {status === 'REVIEW' && "Verify the extracted information against the document."}
-                    {status === 'ERROR' && "Something went wrong during extraction."}
-                </p>
+            <header className="flex justify-between items-start">
+                <div>
+                    <h2 className="text-2xl font-bold text-slate-800">
+                        {status === 'IDLE' && "New Extraction"}
+                        {status === 'SELECT_TYPE' && "Classify Document"}
+                        {status === 'PROCESSING' && "Processing Document"}
+                        {status === 'REVIEW' && (docType ? `Review ${docType} Data` : "Review Data")}
+                        {status === 'ERROR' && "Processing Error"}
+                    </h2>
+                    <p className="text-slate-500">
+                        {status === 'IDLE' && "Upload a borrower document to automatically extract data."}
+                        {status === 'SELECT_TYPE' && "Select the type of document you uploaded."}
+                        {status === 'PROCESSING' && "Please wait while our AI analyzes your document..."}
+                        {status === 'REVIEW' && "Verify the extracted information against the document."}
+                        {status === 'ERROR' && "Something went wrong during extraction."}
+                    </p>
+                </div>
             </header>
 
             <AnimatePresence mode="wait">
