@@ -59,7 +59,13 @@ function App() {
       setExtractedData(data);
       setStatus('REVIEW');
     } catch (err) {
-      console.error(err);
+      import { logger } from './services/logger';
+
+      // ... (other imports)
+
+      // ... inside App component
+    } catch (err) {
+      logger.error(err);
       setErrorMsg("Failed to process document. Please try again.");
       setStatus('ERROR');
     }
@@ -69,7 +75,11 @@ function App() {
     if (!session?.user || !currentFile || !docType) return;
 
     try {
-      setStatus('PROCESSING'); // Re-use processing state or add a SAVING state
+      // EPHEMERAL PROCESSING ZONE:
+      // Data is held in memory only until this save point.
+      // Once uploaded to Supabase, local state is reset.
+
+      setStatus('PROCESSING');
 
       const { uploadDocument } = await import('./services/supabase');
       await uploadDocument(currentFile, docType, data, session.user.id);
@@ -77,7 +87,7 @@ function App() {
       alert("Document saved successfully!");
       reset();
     } catch (err) {
-      console.error("Save failed:", err);
+      logger.error("Save failed:", err);
       // alert("Failed to save document. Please try again.");
       setErrorMsg("Failed to save document to Supabase.");
       setStatus('ERROR');
