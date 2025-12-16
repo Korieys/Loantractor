@@ -12,6 +12,7 @@ import { LandingPage } from './pages/LandingPage';
 import { supabase } from './services/supabase';
 import { AnimatePresence, motion } from 'framer-motion';
 import type { Session } from '@supabase/supabase-js';
+import { logger } from './services/logger';
 
 type AppState = 'IDLE' | 'SELECT_TYPE' | 'PROCESSING' | 'REVIEW' | 'ERROR';
 
@@ -58,12 +59,6 @@ function App() {
       const data = await extractLoanData(currentFile, type);
       setExtractedData(data);
       setStatus('REVIEW');
-    } catch (err) {
-      import { logger } from './services/logger';
-
-      // ... (other imports)
-
-      // ... inside App component
     } catch (err) {
       logger.error(err);
       setErrorMsg("Failed to process document. Please try again.");
