@@ -44,7 +44,7 @@ export function FileUploader({ onFileUpload }: FileUploaderProps) {
             <Card
                 {...getRootProps()}
                 className={cn(
-                    "p-10 border-2 border-dashed transition-all cursor-pointer flex flex-col items-center justify-center text-center gap-4 bg-white/50",
+                    "p-6 sm:p-10 border-2 border-dashed transition-all cursor-pointer flex flex-col items-center justify-center text-center gap-4 bg-white/50",
                     isDragActive ? "border-primary bg-primary/5 scale-[1.02]" : "border-slate-300 hover:border-primary/50",
                     isDragging && "ring-4 ring-primary/20"
                 )}

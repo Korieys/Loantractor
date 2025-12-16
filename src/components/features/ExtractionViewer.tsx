@@ -90,9 +90,9 @@ export function ExtractionViewer({ data: initialData, file, onSave, onCancel }: 
     const fileUrl = file ? URL.createObjectURL(file) : null;
 
     return (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-[calc(100vh-140px)]">
+        <div className="flex flex-col lg:grid lg:grid-cols-2 gap-6 lg:h-[calc(100vh-140px)]">
             {/* Document View */}
-            <Card className="h-full flex flex-col overflow-hidden bg-slate-800 border-slate-700 relative group">
+            <Card className="h-[50vh] lg:h-full flex flex-col overflow-hidden bg-slate-800 border-slate-700 relative group flex-shrink-0">
                 <CardHeader className="bg-slate-900/50 py-3 px-4 border-b border-slate-700 flex-shrink-0 z-10 w-full">
                     <CardTitle className="text-slate-200 text-sm flex items-center justify-between w-full">
                         <span className="truncate mr-2">{file?.name || "Document Preview"}</span>
@@ -133,11 +133,11 @@ export function ExtractionViewer({ data: initialData, file, onSave, onCancel }: 
             </Card>
 
             {/* Data View */}
-            <Card className="h-full flex flex-col overflow-hidden">
+            <Card className="flex-1 lg:h-full flex flex-col overflow-hidden min-h-[500px]">
                 <CardHeader className="py-4 border-b">
-                    <CardTitle className="flex items-center justify-between">
+                    <CardTitle className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                         <span>Extracted Data</span>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 self-end sm:self-auto">
                             <div className="flex bg-slate-100 rounded-lg p-1 mr-2">
                                 <button onClick={() => {
                                     const allText = data.map(i => `${i.field}: ${i.value}`).join('\n')

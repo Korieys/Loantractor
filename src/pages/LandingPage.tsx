@@ -71,7 +71,7 @@ export function LandingPage({ onLogin }: LandingPageProps) {
                         <span>Powered by GPT-4o Vision</span>
                     </motion.div>
 
-                    <h1 className="text-5xl md:text-7xl lg:text-8xl font-extrabold tracking-tight mb-8">
+                    <h1 className="text-4xl sm:text-5xl md:text-7xl lg:text-8xl font-extrabold tracking-tight mb-8">
                         <span className="block text-white mb-2">Extract Data</span>
                         <span className="text-transparent bg-clip-text bg-gradient-to-r from-violet-400 via-indigo-400 to-blue-400">
                             The Intelligent Way
