@@ -7,9 +7,10 @@
     --background: 0 0% 100%;
     --foreground: 224 71% 4%;
 
-    /* Premium Violet Primary */
+    /* Premium Violet Primary - Parseon Brand */
     --primary: 262 83% 58%;
-    --primary-foreground: 210 40% 98%;
+    /* Rich Violet */
+    --primary-foreground: 0 0% 100%;
 
     --card: 0 0% 100%;
     --card-foreground: 224 71% 4%;
