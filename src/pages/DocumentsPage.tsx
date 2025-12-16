@@ -3,7 +3,9 @@ import { Button } from '../components/ui/Button';
 
 // ... imports
 import { useEffect, useState } from 'react';
-import { supabase, getUserDocuments } from '../services/supabase';
+import { supabase, getUserDocuments, getSignedUrl, deleteDocument } from '../services/supabase';
+import { useNavigate } from 'react-router-dom';
+import { Trash2, ExternalLink } from 'lucide-react';
 
 interface Document {
     id: string;
@@ -16,6 +18,7 @@ interface Document {
 export function DocumentsPage() {
     const [documents, setDocuments] = useState<Document[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+    const navigate = useNavigate();
 
     useEffect(() => {
         loadDocuments();
@@ -35,6 +38,27 @@ export function DocumentsPage() {
         }
     };
 
+    const handleView = async (filePath: string) => {
+        try {
+            const url = await getSignedUrl(filePath);
+            window.open(url, '_blank');
+        } catch (error) {
+            alert('Failed to load document');
+        }
+    };
+
+    const handleDelete = async (id: string, filePath: string) => {
+        if (!confirm('Are you sure you want to delete this document?')) return;
+
+        try {
+            await deleteDocument(id, filePath);
+            // Optimistic update
+            setDocuments(docs => docs.filter(d => d.id !== id));
+        } catch (error) {
+            alert('Failed to delete document');
+        }
+    };
+
     return (
         <div className="space-y-6">
             <header className="flex justify-between items-center">
@@ -42,7 +66,7 @@ export function DocumentsPage() {
                     <h2 className="text-2xl font-bold text-slate-800">Documents</h2>
                     <p className="text-slate-500">Manage and review your processed documents.</p>
                 </div>
-                <Button>
+                <Button onClick={() => navigate('/')}>
                     <FileText size={16} className="mr-2" />
                     Upload New
                 </Button>
@@ -97,8 +121,23 @@ export function DocumentsPage() {
                                             Processed
                                         </span>
                                     </td>
-                                    <td className="px-6 py-4 text-right">
-                                        <button className="text-primary hover:text-primary/80 font-medium text-sm">View</button>
+                                    <td className="px-6 py-4 text-right flex justify-end gap-2">
+                                        <Button
+                                            variant="ghost"
+                                            className="h-8 w-8 p-0 text-slate-500 hover:text-primary"
+                                            onClick={() => handleView(doc.file_path)}
+                                            title="View Document"
+                                        >
+                                            <ExternalLink size={16} />
+                                        </Button>
+                                        <Button
+                                            variant="ghost"
+                                            className="h-8 w-8 p-0 text-slate-500 hover:text-red-600"
+                                            onClick={() => handleDelete(doc.id, doc.file_path)}
+                                            title="Delete Document"
+                                        >
+                                            <Trash2 size={16} />
+                                        </Button>
                                     </td>
                                 </tr>
                             ))

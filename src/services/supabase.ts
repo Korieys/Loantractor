@@ -64,3 +64,52 @@ export async function getUserDocuments(userId: string) {
     return data;
 }
 
+export async function getSignedUrl(filePath: string) {
+    const { data, error } = await supabase.storage
+        .from('documents')
+        .createSignedUrl(filePath, 60 * 60); // 1 hour expiry
+
+    if (error) {
+        console.error('Error creating signed URL:', error);
+        throw error;
+    }
+
+    return data.signedUrl;
+}
+
+export async function deleteDocument(id: string, filePath: string) {
+    // 1. Delete from Storage
+    const { error: storageError } = await supabase.storage
+        .from('documents')
+        .remove([filePath]);
+
+    if (storageError) {
+        console.error('Error deleting file from storage:', storageError);
+        throw storageError;
+    }
+
+    // 2. Delete from Database
+    const { error: dbError } = await supabase
+        .from('documents')
+        .delete()
+        .eq('id', id);
+
+    if (dbError) {
+        console.error('Error deleting record from database:', dbError);
+        throw dbError;
+    }
+
+    return { success: true };
+}
+
+export async function updateUserProfile(attributes: { data: { first_name: string, last_name: string } }) {
+    const { data, error } = await supabase.auth.updateUser(attributes);
+
+    if (error) {
+        console.error('Error updating user profile:', error);
+        throw error;
+    }
+
+    return data;
+}
+

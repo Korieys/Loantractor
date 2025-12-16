@@ -1,7 +1,54 @@
-import { User, Bell, Database } from 'lucide-react';
+import { User, Bell, Database, Loader2 } from 'lucide-react';
 import { Button } from '../components/ui/Button';
+import { useEffect, useState } from 'react';
+import { supabase, updateUserProfile } from '../services/supabase';
 
 export function SettingsPage() {
+    const [loading, setLoading] = useState(true);
+    const [saving, setSaving] = useState(false);
+    const [user, setUser] = useState<any>(null);
+
+    // Form State
+    const [firstName, setFirstName] = useState('');
+    const [lastName, setLastName] = useState('');
+    const [email, setEmail] = useState('');
+
+    useEffect(() => {
+        loadProfile();
+    }, []);
+
+    const loadProfile = async () => {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+            setUser(user);
+            setEmail(user.email || '');
+            setFirstName(user.user_metadata?.first_name || '');
+            setLastName(user.user_metadata?.last_name || '');
+        }
+        setLoading(false);
+    };
+
+    const handleSaveProfile = async () => {
+        setSaving(true);
+        try {
+            await updateUserProfile({
+                data: {
+                    first_name: firstName,
+                    last_name: lastName
+                }
+            });
+            alert('Profile updated successfully!');
+        } catch (error) {
+            alert('Failed to update profile.');
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    if (loading) {
+        return <div className="p-8 text-center">Loading settings...</div>;
+    }
+
     return (
         <div className="space-y-6">
             <header>
@@ -20,18 +67,36 @@ export function SettingsPage() {
                         <div className="grid grid-cols-2 gap-4">
                             <div>
                                 <label className="block text-sm font-medium text-slate-700 mb-1">First Name</label>
-                                <input type="text" defaultValue="Kevin" className="w-full px-3 py-2 border border-slate-200 rounded-md" />
+                                <input
+                                    type="text"
+                                    value={firstName}
+                                    onChange={(e) => setFirstName(e.target.value)}
+                                    className="w-full px-3 py-2 border border-slate-200 rounded-md"
+                                />
                             </div>
                             <div>
                                 <label className="block text-sm font-medium text-slate-700 mb-1">Last Name</label>
-                                <input type="text" defaultValue="Dixon" className="w-full px-3 py-2 border border-slate-200 rounded-md" />
+                                <input
+                                    type="text"
+                                    value={lastName}
+                                    onChange={(e) => setLastName(e.target.value)}
+                                    className="w-full px-3 py-2 border border-slate-200 rounded-md"
+                                />
                             </div>
                         </div>
                         <div>
                             <label className="block text-sm font-medium text-slate-700 mb-1">Email Address</label>
-                            <input type="email" defaultValue="kjdix@example.com" className="w-full px-3 py-2 border border-slate-200 rounded-md" />
+                            <input
+                                type="email"
+                                value={email}
+                                disabled
+                                className="w-full px-3 py-2 border border-slate-200 rounded-md bg-slate-50 text-slate-500 cursor-not-allowed"
+                            />
                         </div>
-                        <Button>Save Changes</Button>
+                        <Button onClick={handleSaveProfile} disabled={saving}>
+                            {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                            Save Changes
+                        </Button>
                     </div>
                 </section>
 
