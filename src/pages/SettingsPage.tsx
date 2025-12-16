@@ -6,7 +6,6 @@ import { supabase, updateUserProfile } from '../services/supabase';
 export function SettingsPage() {
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
-    const [user, setUser] = useState<any>(null);
 
     // Form State
     const [firstName, setFirstName] = useState('');
