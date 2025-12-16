@@ -1,11 +1,17 @@
 import { motion } from 'framer-motion'
-import { Scan, FileText, Loader2 } from 'lucide-react'
+import { Scan, FileText, Loader2, Save, CheckCircle } from 'lucide-react'
 
-export function ProcessingLoader() {
+interface ProcessingLoaderProps {
+    mode?: 'analyzing' | 'saving';
+}
+
+export function ProcessingLoader({ mode = 'analyzing' }: ProcessingLoaderProps) {
+    const isSaving = mode === 'saving';
+
     return (
         <div className="flex flex-col items-center justify-center h-64 space-y-8">
             <div className="relative">
-                {/* Animated scanning effect */}
+                {/* Animated background effect */}
                 <motion.div
                     className="absolute inset-0 bg-primary/20 rounded-full blur-xl"
                     animate={{ scale: [1, 1.2, 1], opacity: [0.5, 0.8, 0.5] }}
@@ -16,10 +22,19 @@ export function ProcessingLoader() {
                     <FileText size={48} className="text-slate-300" />
                     <motion.div
                         className="absolute inset-0 flex items-center justify-center text-primary"
-                        animate={{ opacity: [0, 1, 0, 1] }}
-                        transition={{ duration: 3, repeat: Infinity, times: [0, 0.2, 0.8, 1] }}
+                        animate={isSaving ? { opacity: 1 } : { opacity: [0, 1, 0, 1] }}
+                        transition={isSaving ? {} : { duration: 3, repeat: Infinity, times: [0, 0.2, 0.8, 1] }}
                     >
-                        <Scan size={48} />
+                        {isSaving ? (
+                            <motion.div
+                                initial={{ scale: 0.5, opacity: 0 }}
+                                animate={{ scale: 1, opacity: 1 }}
+                            >
+                                <Save size={32} />
+                            </motion.div>
+                        ) : (
+                            <Scan size={48} />
+                        )}
                     </motion.div>
                 </div>
             </div>
@@ -27,10 +42,12 @@ export function ProcessingLoader() {
             <div className="text-center space-y-2">
                 <h3 className="text-xl font-semibold text-slate-800 flex items-center gap-2 justify-center">
                     <Loader2 className="animate-spin" size={20} />
-                    Analyzing Document
+                    {isSaving ? "Saving to Database" : "Analyzing Document"}
                 </h3>
                 <p className="text-slate-500 max-w-xs mx-auto">
-                    Extracting key loan information, names, amounts, and dates...
+                    {isSaving
+                        ? "Encrypting and storing your extraction results..."
+                        : "Extracting key loan information, names, amounts, and dates..."}
                 </p>
             </div>
 
@@ -39,7 +56,7 @@ export function ProcessingLoader() {
                     className="h-full bg-primary"
                     initial={{ width: "0%" }}
                     animate={{ width: "100%" }}
-                    transition={{ duration: 2.5, ease: "easeInOut" }}
+                    transition={{ duration: isSaving ? 1.5 : 2.5, ease: "easeInOut" }}
                 />
             </div>
         </div>
