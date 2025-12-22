@@ -1,4 +1,5 @@
 
+import { MOCK_EXTRACTION_DATA } from '../data/mockExtraction';
 
 interface ExtractedData {
     field: string;
@@ -108,9 +109,16 @@ export async function extractLoanData(file: File, docType: string = "Generic Loa
         });
 
         if (!response.ok) {
-            console.warn("Proxy call failed, falling back to mock data if dev/preview");
-            // If proxy fails (e.g. running locally without netlify dev), throw to allow UI to handle
-            // or return mock data as absolute fallback for demo purposes
+            console.warn("Proxy call failed:", response.status, response.statusText);
+
+            // Fallback to mock data if handling a 404 (local dev without vercel)
+            if (import.meta.env.DEV && response.status === 404) {
+                console.info("Falling back to MOCK DATA for development.");
+                // Simulate a small delay for realism
+                await new Promise(r => setTimeout(r, 1000));
+                return MOCK_EXTRACTION_DATA;
+            }
+
             const errorText = await response.text();
             throw new Error(`Proxy Error: ${response.status} ${errorText}`);
         }
