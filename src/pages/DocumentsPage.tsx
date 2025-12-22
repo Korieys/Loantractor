@@ -1,4 +1,4 @@
-import { FileText, Search, Filter } from 'lucide-react';
+import { FileText, Search, Filter, Download } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 
 // ... imports
@@ -59,6 +59,20 @@ export function DocumentsPage() {
         }
     };
 
+    const handleExport = () => {
+        if (documents.length === 0) return;
+
+        const jsonString = JSON.stringify(documents, null, 2);
+        const blob = new Blob([jsonString], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `loantractor-export-${new Date().toISOString().split('T')[0]}.json`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
+
     return (
         <div className="space-y-6">
             <header className="flex justify-between items-center">
@@ -66,10 +80,16 @@ export function DocumentsPage() {
                     <h2 className="text-2xl font-bold text-slate-800">Documents</h2>
                     <p className="text-slate-500">Manage and review your processed documents.</p>
                 </div>
-                <Button onClick={() => navigate('/')}>
-                    <FileText size={16} className="mr-2" />
-                    Upload New
-                </Button>
+                <div className="flex gap-2">
+                    <Button variant="outline" onClick={handleExport} disabled={documents.length === 0}>
+                        <Download size={16} className="mr-2" />
+                        Export JSON
+                    </Button>
+                    <Button onClick={() => navigate('/')}>
+                        <FileText size={16} className="mr-2" />
+                        Upload New
+                    </Button>
+                </div>
             </header>
 
             {/* Filters & Search - Stacked on mobile */}

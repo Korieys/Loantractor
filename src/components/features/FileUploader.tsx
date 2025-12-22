@@ -58,7 +58,7 @@ export function FileUploader({ onFileUpload }: FileUploaderProps) {
                 </div>
                 <div>
                     <h3 className="text-lg font-semibold text-slate-800">
-                        {isDragActive ? "Drop files here" : "Upload Borrower Documents"}
+                        {isDragActive ? "Drop files here" : "Upload Borrower Documents (Batch Supported)"}
                     </h3>
                     <p className="text-sm text-slate-500 mt-1">
                         Drag and drop or click to browse (PDF, PNG, JPG)

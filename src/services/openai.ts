@@ -76,8 +76,8 @@ export async function extractLoanData(file: File, docType: string = "Generic Loa
     try {
         const base64Image = await fileToBase64(file);
 
-        // Call our own secure Proxy (Netlify Function) instead of OpenAI directly
-        const response = await fetch("/.netlify/functions/openai-proxy", {
+        // Call our own secure Proxy (Vercel Serverless Function) instead of OpenAI directly
+        const response = await fetch("/api/openai", {
             method: "POST",
             headers: {
                 "Content-Type": "application/json"

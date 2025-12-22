@@ -10,21 +10,44 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { logger } from '../services/logger';
 import { supabase } from '../services/supabase';
 
-type AppState = 'IDLE' | 'SELECT_TYPE' | 'PROCESSING' | 'SAVING' | 'REVIEW' | 'ERROR';
+import { BatchQueue } from '../components/features/BatchQueue';
+import type { QueueItem } from '../components/features/BatchQueue';
+import { Button } from '../components/ui/Button';
+
+type AppState = 'IDLE' | 'SELECT_TYPE' | 'PROCESSING' | 'SAVING' | 'REVIEW' | 'ERROR' | 'BATCH_PREPARE' | 'BATCH_PROCESSING' | 'BATCH_COMPLETE';
 
 export function DashboardPage() {
     const [status, setStatus] = useState<AppState>('IDLE');
+    // Single file flow state
     const [currentFile, setCurrentFile] = useState<File | null>(null);
     const [docType, setDocType] = useState<LoanDocType | null>(null);
     const [extractedData, setExtractedData] = useState(MOCK_EXTRACTION_DATA);
+
+    // Batch flow state
+    const [queue, setQueue] = useState<QueueItem[]>([]);
+    const [batchDocType, setBatchDocType] = useState<LoanDocType | null>(null);
+
     const [errorMsg, setErrorMsg] = useState("");
 
     const handleFileUpload = (files: File[]) => {
         if (files.length === 0) return;
-        setCurrentFile(files[0]);
-        setStatus('SELECT_TYPE');
+
+        if (files.length === 1) {
+            setCurrentFile(files[0]);
+            setStatus('SELECT_TYPE');
+        } else {
+            // Initialize queue
+            const newQueue = files.map(f => ({
+                id: crypto.randomUUID(),
+                file: f,
+                status: 'PENDING'
+            } as QueueItem));
+            setQueue(newQueue);
+            setStatus('BATCH_PREPARE');
+        }
     };
 
+    // Single file flow handlers
     const handleTypeSelect = async (type: LoanDocType) => {
         setDocType(type);
         setStatus('PROCESSING');
@@ -43,7 +66,6 @@ export function DashboardPage() {
     };
 
     const handleSave = async (data: typeof MOCK_EXTRACTION_DATA) => {
-        // Need user session for upload
         const { data: { session } } = await supabase.auth.getSession();
 
         if (!session?.user || !currentFile || !docType) {
@@ -53,7 +75,6 @@ export function DashboardPage() {
 
         try {
             setStatus('SAVING');
-
             const { uploadDocument } = await import('../services/supabase');
             await uploadDocument(currentFile, docType, data, session.user.id);
 
@@ -66,11 +87,73 @@ export function DashboardPage() {
         }
     };
 
+    // Batch flow handlers
+    const startBatchProcessing = async (type: LoanDocType) => {
+        setBatchDocType(type);
+        setStatus('BATCH_PROCESSING');
+
+        // We need to process sequentially to not hit rate limits and for better UX
+        // Note: In a real app we might do small chunks of concurrency
+
+        let currentQueue = [...queue];
+
+        for (let i = 0; i < currentQueue.length; i++) {
+            if (currentQueue[i].status === 'COMPLETED') continue;
+
+            // Update status to processing
+            updateQueueItem(currentQueue[i].id, { status: 'PROCESSING' });
+
+            try {
+                // 1. Extract
+                const data = await extractLoanData(currentQueue[i].file, type);
+
+                // 2. Auto-save (Batch mode = Auto-save for now)
+                const { data: { session } } = await supabase.auth.getSession();
+                if (session?.user) {
+                    const { uploadDocument } = await import('../services/supabase');
+                    await uploadDocument(currentQueue[i].file, type, data, session.user.id);
+                }
+
+                updateQueueItem(currentQueue[i].id, {
+                    status: 'COMPLETED',
+                    result: data,
+                    docType: type
+                });
+
+            } catch (err) {
+                console.error(err);
+                updateQueueItem(currentQueue[i].id, {
+                    status: 'ERROR',
+                    error: err instanceof Error ? err.message : 'Unknown error'
+                });
+            }
+
+            // Refresh local queue ref for next iteration in case of UI updates (though we use functional updates typically, 
+            // here we are in a loop. Better to just continue with our local copy logic but we need to ensure state is synced if user cancels)
+            // For simplicity in this loop, we just proceed.
+        }
+
+        setStatus('BATCH_COMPLETE');
+    };
+
+    const updateQueueItem = (id: string, updates: Partial<QueueItem>) => {
+        setQueue(prev => prev.map(item =>
+            item.id === id ? { ...item, ...updates } : item
+        ));
+    };
+
+    const removeFromQueue = (id: string) => {
+        setQueue(prev => prev.filter(i => i.id !== id));
+        if (queue.length <= 1) reset(); // Go back if empty
+    };
+
     const reset = () => {
         setStatus('IDLE');
         setCurrentFile(null);
         setDocType(null);
         setExtractedData(MOCK_EXTRACTION_DATA);
+        setQueue([]);
+        setBatchDocType(null);
         setErrorMsg("");
     };
 
@@ -85,14 +168,15 @@ export function DashboardPage() {
                         {status === 'SAVING' && "Saving Data"}
                         {status === 'REVIEW' && (docType ? `Review ${docType} Data` : "Review Data")}
                         {status === 'ERROR' && "Processing Error"}
+                        {(status === 'BATCH_PREPARE' || status === 'BATCH_PROCESSING' || status === 'BATCH_COMPLETE') && "Batch Processing"}
                     </h2>
                     <p className="text-slate-500">
-                        {status === 'IDLE' && "Upload a borrower document to automatically extract data."}
+                        {status === 'IDLE' && "Upload borrower documents to automatically extract data."}
                         {status === 'SELECT_TYPE' && "Select the type of document you uploaded."}
-                        {status === 'PROCESSING' && "Please wait while our AI analyzes your document..."}
-                        {status === 'SAVING' && "Securing your data in the database..."}
-                        {status === 'REVIEW' && "Verify the extracted information against the document."}
-                        {status === 'ERROR' && "Something went wrong during extraction."}
+                        {status === 'BATCH_PREPARE' && "Configure your batch upload."}
+                        {status === 'BATCH_PROCESSING' && `Processing your ${batchDocType} queue...`}
+                        {status === 'BATCH_COMPLETE' && "Batch processing complete."}
+                        {(status === 'PROCESSING' || status === 'SAVING') && "Please wait while we process your request..."}
                     </p>
                 </div>
             </header>
@@ -117,6 +201,45 @@ export function DashboardPage() {
                         exit={{ opacity: 0, y: -10 }}
                     >
                         <DocTypeSelector onSelect={handleTypeSelect} onCancel={reset} />
+                    </motion.div>
+                )}
+
+                {(status === 'BATCH_PREPARE' || status === 'BATCH_PROCESSING' || status === 'BATCH_COMPLETE') && (
+                    <motion.div
+                        key="batch-queue"
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.95 }}
+                        className="space-y-6"
+                    >
+                        {status === 'BATCH_PREPARE' && (
+                            <div className="bg-blue-50 border border-blue-100 p-4 rounded-lg flex flex-col sm:flex-row items-center justify-between gap-4">
+                                <div className="flex items-center gap-3">
+                                    <div className="p-2 bg-blue-100 rounded-full text-blue-600 font-bold">1</div>
+                                    <div>
+                                        <h4 className="font-semibold text-blue-900">Select Document Type</h4>
+                                        <p className="text-xs text-blue-700">All files in this batch must be the same type.</p>
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <DocTypeSelector onSelect={startBatchProcessing} onCancel={reset} showLabel={false} />
+                                </div>
+                            </div>
+                        )}
+
+                        <BatchQueue
+                            items={queue}
+                            onRemove={removeFromQueue}
+                            onRetry={(id) => updateQueueItem(id, { status: 'PENDING', error: undefined })}
+                            onClearCompleted={() => setQueue(prev => prev.filter(i => i.status !== 'COMPLETED'))}
+                            isProcessing={status === 'BATCH_PROCESSING'}
+                        />
+
+                        {status === 'BATCH_COMPLETE' && (
+                            <div className="flex justify-center pt-4">
+                                <Button onClick={reset} size="lg">Start New Upload</Button>
+                            </div>
+                        )}
                     </motion.div>
                 )}
 

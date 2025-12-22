@@ -1,8 +1,9 @@
-import { useState, useRef } from 'react'
-import { Edit2, AlertCircle, Copy, Check, ZoomIn, ZoomOut, RotateCcw, FileCode, FileText } from 'lucide-react'
+import { useState, useRef, useMemo } from 'react'
+import { Edit2, AlertCircle, Copy, Check, ZoomIn, ZoomOut, RotateCcw, FileCode, FileText, AlertTriangle } from 'lucide-react'
 import { Button } from '../ui/Button'
 import { Card, CardHeader, CardTitle, CardContent } from '../ui/Card'
 import { Input } from '../ui/Input'
+import { validateExtraction } from '../../services/validation'
 
 // Mock interface for extraction data
 interface ExtractedData {
@@ -27,6 +28,9 @@ export function ExtractionViewer({ data: initialData, file, onSave, onCancel }: 
     const [copiedIndex, setCopiedIndex] = useState<number | null>(null)
 
     const imageRef = useRef<HTMLDivElement>(null)
+
+    // Run validation on data change
+    const validationResult = useMemo(() => validateExtraction(data), [data])
 
     const handleFieldChange = (index: number, newValue: string) => {
         const newData = [...data]
@@ -136,7 +140,15 @@ export function ExtractionViewer({ data: initialData, file, onSave, onCancel }: 
             <Card className="flex-1 lg:h-full flex flex-col overflow-hidden min-h-[500px]">
                 <CardHeader className="py-4 border-b">
                     <CardTitle className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                        <span>Extracted Data</span>
+                        <div className="flex items-center gap-2">
+                            <span>Extracted Data</span>
+                            {!validationResult.isValid && (
+                                <span className="text-xs font-normal text-red-500 bg-red-50 px-2 py-0.5 rounded-full flex items-center gap-1">
+                                    <AlertCircle size={12} />
+                                    {validationResult.errors.length} Issues
+                                </span>
+                            )}
+                        </div>
                         <div className="flex items-center gap-2 self-end sm:self-auto">
                             <div className="flex bg-slate-100 rounded-lg p-1 mr-2">
                                 <button onClick={() => {
@@ -162,41 +174,71 @@ export function ExtractionViewer({ data: initialData, file, onSave, onCancel }: 
                 </CardHeader>
                 <CardContent className="flex-1 overflow-auto p-0">
                     <div className="divide-y divide-slate-100">
-                        {data.map((item, index) => (
-                            <div key={index} className="p-4 hover:bg-slate-50 transition-colors group">
-                                <div className="flex items-center justify-between mb-1">
-                                    <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">{item.field}</label>
-                                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${item.confidence > 0.9 ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
-                                        }`}>
-                                        {Math.round(item.confidence * 100)}% Match
-                                    </span>
-                                </div>
+                        {data.map((item, index) => {
+                            const fieldError = validationResult.errors.find(e => e.field === item.field)
+                            const isError = fieldError?.severity === 'ERROR'
+                            const isWarning = fieldError?.severity === 'WARNING'
 
-                                <div className="relative flex items-center gap-2">
-                                    <div className="relative flex-1">
-                                        <Input
-                                            value={item.value}
-                                            onChange={(e) => handleFieldChange(index, e.target.value)}
-                                            className="bg-transparent border-transparent hover:border-slate-300 focus:bg-white transition-all font-medium text-slate-900 pr-8"
-                                        />
-                                        <div className="absolute right-2 top-2.5 opacity-0 group-hover:opacity-100 pointer-events-none text-slate-400">
-                                            <Edit2 size={14} />
+                            return (
+                                <div key={index} className={cn(
+                                    "p-4 transition-colors group border-l-4",
+                                    isError ? "bg-red-50/50 border-red-500" :
+                                        isWarning ? "bg-yellow-50/50 border-yellow-500" :
+                                            "hover:bg-slate-50 border-transparent"
+                                )}>
+                                    <div className="flex items-center justify-between mb-1">
+                                        <div className="flex items-center gap-2">
+                                            <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">{item.field}</label>
+                                            {fieldError && (
+                                                <span className={cn(
+                                                    "text-[10px] flex items-center gap-1",
+                                                    isError ? "text-red-600" : "text-yellow-600"
+                                                )}>
+                                                    {isError ? <AlertCircle size={10} /> : <AlertTriangle size={10} />}
+                                                    {fieldError.message}
+                                                </span>
+                                            )}
                                         </div>
+                                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${item.confidence > 0.9 ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
+                                            }`}>
+                                            {Math.round(item.confidence * 100)}% Match
+                                        </span>
                                     </div>
 
-                                    <button
-                                        onClick={() => handleCopy(item.value, index)}
-                                        className="p-2 text-slate-400 hover:text-primary hover:bg-primary/10 rounded-md transition-colors"
-                                        title="Copy value"
-                                    >
-                                        {copiedIndex === index ? <Check size={16} className="text-green-600" /> : <Copy size={16} />}
-                                    </button>
+                                    <div className="relative flex items-center gap-2">
+                                        <div className="relative flex-1">
+                                            <Input
+                                                value={item.value}
+                                                onChange={(e) => handleFieldChange(index, e.target.value)}
+                                                className={cn(
+                                                    "transition-all font-medium text-slate-900 pr-8",
+                                                    "bg-transparent border-transparent hover:border-slate-300 focus:bg-white",
+                                                    isError && "text-red-900 placeholder:text-red-300"
+                                                )}
+                                            />
+                                            <div className="absolute right-2 top-2.5 opacity-0 group-hover:opacity-100 pointer-events-none text-slate-400">
+                                                <Edit2 size={14} />
+                                            </div>
+                                        </div>
+
+                                        <button
+                                            onClick={() => handleCopy(item.value, index)}
+                                            className="p-2 text-slate-400 hover:text-primary hover:bg-primary/10 rounded-md transition-colors"
+                                            title="Copy value"
+                                        >
+                                            {copiedIndex === index ? <Check size={16} className="text-green-600" /> : <Copy size={16} />}
+                                        </button>
+                                    </div>
                                 </div>
-                            </div>
-                        ))}
+                            )
+                        })}
                     </div>
                 </CardContent>
             </Card>
         </div>
     )
+}
+
+function cn(...classes: (string | undefined | null | false)[]) {
+    return classes.filter(Boolean).join(' ')
 }
