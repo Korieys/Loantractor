@@ -1,11 +1,10 @@
-import { FileText, Search, Filter, Download } from 'lucide-react';
+import { FileText, Search, Filter, Download, ExternalLink, Trash2 } from 'lucide-react';
 import { Button } from '../components/ui/Button';
-
-// ... imports
 import { useEffect, useState } from 'react';
 import { supabase, getUserDocuments, getSignedUrl, deleteDocument } from '../services/supabase';
 import { useNavigate } from 'react-router-dom';
-import { Trash2, ExternalLink } from 'lucide-react';
+import { ExtractionViewer } from '../components/features/ExtractionViewer';
+import { motion, AnimatePresence } from 'framer-motion';
 
 interface Document {
     id: string;
@@ -18,6 +17,8 @@ interface Document {
 export function DocumentsPage() {
     const [documents, setDocuments] = useState<Document[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+    const [selectedDoc, setSelectedDoc] = useState<Document | null>(null);
+    const [viewUrl, setViewUrl] = useState<string | null>(null);
     const navigate = useNavigate();
 
     useEffect(() => {
@@ -38,10 +39,11 @@ export function DocumentsPage() {
         }
     };
 
-    const handleView = async (filePath: string) => {
+    const handleView = async (doc: Document) => {
         try {
-            const url = await getSignedUrl(filePath);
-            window.open(url, '_blank');
+            const url = await getSignedUrl(doc.file_path);
+            setViewUrl(url);
+            setSelectedDoc(doc);
         } catch (error) {
             alert('Failed to load document');
         }
@@ -73,8 +75,13 @@ export function DocumentsPage() {
         document.body.removeChild(link);
     };
 
+    const handleCloseViewer = () => {
+        setSelectedDoc(null);
+        setViewUrl(null);
+    }
+
     return (
-        <div className="space-y-6">
+        <div className="space-y-6 relative min-h-screen">
             <header className="flex justify-between items-center">
                 <div>
                     <h2 className="text-2xl font-bold text-slate-800">Documents</h2>
@@ -146,7 +153,7 @@ export function DocumentsPage() {
                                             <Button
                                                 variant="ghost"
                                                 className="h-8 w-8 p-0 text-slate-500 hover:text-primary"
-                                                onClick={() => handleView(doc.file_path)}
+                                                onClick={() => handleView(doc)}
                                                 title="View Document"
                                             >
                                                 <ExternalLink size={16} />
@@ -167,6 +174,35 @@ export function DocumentsPage() {
                     </table>
                 </div>
             </div>
+
+            {/* Viewer Overlay */}
+            <AnimatePresence>
+                {selectedDoc && viewUrl && (
+                    <motion.div
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: 20 }}
+                        className="fixed inset-0 z-50 bg-white/95 backdrop-blur-sm p-4 md:p-8 overflow-y-auto"
+                    >
+                        <div className="max-w-7xl mx-auto h-full flex flex-col">
+                            <div className="flex justify-between items-center mb-4">
+                                <h3 className="text-xl font-bold text-slate-900">Document Review</h3>
+                            </div>
+
+                            <ExtractionViewer
+                                data={selectedDoc.extracted_data || []}
+                                file={null} // We don't have the File object, only URL
+                                fileUrl={viewUrl}
+                                onSave={() => {
+                                    handleCloseViewer();
+                                    // TODO: Implement update save logic
+                                }}
+                                onCancel={handleCloseViewer}
+                            />
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
         </div>
     );
 }

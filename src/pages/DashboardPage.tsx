@@ -178,6 +178,36 @@ export function DashboardPage() {
         setErrorMsg("");
     };
 
+    const handleReanalyze = async (newType: LoanDocType) => {
+        if (!currentFile) return;
+
+        setIsReanalyzing(true);
+        try {
+            // Re-extract data with new type
+            const data = await extractLoanData(currentFile, newType);
+
+            // Update local state
+            setExtractedData(data);
+            setDocType(newType);
+
+            // Update queue item if part of a batch
+            if (queue.length > 0) {
+                const queueItemIndex = queue.findIndex(i => i.file === currentFile);
+                if (queueItemIndex >= 0) {
+                    updateQueueItem(queue[queueItemIndex].id, {
+                        docType: newType,
+                        result: data
+                    });
+                }
+            }
+        } catch (error) {
+            console.error("Reanalysis failed:", error);
+            alert("Failed to reanalyze document. Please try again.");
+        } finally {
+            setIsReanalyzing(false);
+        }
+    };
+
     return (
         <div className="space-y-6">
             <header className="flex justify-between items-start">
@@ -283,22 +313,21 @@ export function DashboardPage() {
                 {status === 'REVIEW' && (
                     <motion.div
                         key="review"
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: -10 }}
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        className="h-full"
                     >
                         <ExtractionViewer
                             data={extractedData}
                             file={currentFile}
                             onSave={handleSave}
+                            onReanalyze={handleReanalyze}
+                            isProcessing={isReanalyzing}
                             onCancel={() => {
-                                // If we came from batch, go back to batch complete/prepare screen?
-                                // Simplified: Just reset for now, OR if queue has items, go back to batch screen?
+                                // If we came from batch, return to batch view if items remain
                                 if (queue.length > 0) {
-                                    // If all complete, go to BATCH_COMPLETE, else BATCH_PREPARE/PROCESSING?
-                                    // The logic is a bit state-dependent.
-                                    // Simplest approach: if queue items exist, return to BATCH_COMPLETE state if we reviewed a result.
-                                    setStatus('BATCH_COMPLETE'); // Or determine state based on queue
+                                    // Simplified: return to batch complete/review list
+                                    setStatus('BATCH_COMPLETE');
                                 } else {
                                     reset();
                                 }

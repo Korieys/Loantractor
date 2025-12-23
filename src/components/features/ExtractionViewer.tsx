@@ -17,6 +17,7 @@ interface ExtractedData {
 interface ExtractionViewerProps {
     data: ExtractedData[]
     file: File | null
+    fileUrl?: string // Optional direct URL support
     onSave: (data: ExtractedData[]) => void
     onCancel: () => void
     onReanalyze?: (newType: LoanDocType) => void
@@ -25,7 +26,7 @@ interface ExtractionViewerProps {
 
 const DOC_TYPES: LoanDocType[] = ['Pay Stub', 'Bank Statement', 'Tax Return', 'Loan Application', 'Other'];
 
-export function ExtractionViewer({ data: initialData, file, onSave, onCancel, onReanalyze, isProcessing = false }: ExtractionViewerProps) {
+export function ExtractionViewer({ data: initialData, file, fileUrl: initialFileUrl, onSave, onCancel, onReanalyze, isProcessing = false }: ExtractionViewerProps) {
     const [data, setData] = useState(initialData)
     const [zoom, setZoom] = useState(1)
     const [pan, setPan] = useState({ x: 0, y: 0 })
@@ -103,8 +104,17 @@ export function ExtractionViewer({ data: initialData, file, onSave, onCancel, on
         setPan({ x: 0, y: 0 })
     }
 
-    // Simple placeholder for PDF viewer - using object URL for images or basic embed for PDF
-    const fileUrl = file ? URL.createObjectURL(file) : null;
+    // Use passed URL or create object URL from file
+    const previewUrl = useMemo(() => {
+        if (initialFileUrl) return initialFileUrl;
+        if (file) return URL.createObjectURL(file);
+        return null;
+    }, [file, initialFileUrl]);
+
+    // Determine mime or type for preview logic
+    const isImage = file ? file.type.startsWith('image/') : (previewUrl ? true : false); // Assume URL is image for now or rely on file extension logic if needed. 
+    // Ideally we'd know the type. For Signed URLs from Supabase, they are usually images or PDFs.
+    // Let's assume image for simple viewer unless file type is known.
 
     return (
         <div className="flex flex-col lg:grid lg:grid-cols-2 gap-6 lg:h-[calc(100vh-140px)] relative">
@@ -130,7 +140,7 @@ export function ExtractionViewer({ data: initialData, file, onSave, onCancel, on
                     onMouseLeave={handleMouseUp}
                     ref={imageRef}
                 >
-                    {file && file.type.startsWith('image/') ? (
+                    {isImage ? (
                         <div
                             className="w-full h-full flex items-center justify-center pointer-events-none"
                             style={{
@@ -138,7 +148,7 @@ export function ExtractionViewer({ data: initialData, file, onSave, onCancel, on
                                 transition: isDragging ? 'none' : 'transform 0.2s ease-out'
                             }}
                         >
-                            <img src={fileUrl!} alt="Doc" className="max-w-none shadow-lg" />
+                            <img src={previewUrl!} alt="Doc" className="max-w-none shadow-lg" />
                         </div>
                     ) : (
                         <div className="text-slate-500 flex flex-col items-center justify-center h-full">
@@ -151,7 +161,7 @@ export function ExtractionViewer({ data: initialData, file, onSave, onCancel, on
 
             {/* Data View */}
             <Card className="flex-1 lg:h-full flex flex-col overflow-hidden min-h-[500px]">
-                <CardHeader className="py-4 border-b">
+                <CardHeader className="py-4 border-b relative z-20">
                     <CardTitle className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                         <div className="flex items-center gap-2">
                             <span>Extracted Data</span>
@@ -164,20 +174,22 @@ export function ExtractionViewer({ data: initialData, file, onSave, onCancel, on
                         </div>
                         <div className="flex items-center gap-2 self-end sm:self-auto">
                             {onReanalyze && (
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => setShowReanalyze(!showReanalyze)}
-                                    className="gap-2 text-blue-600 border-blue-200 hover:bg-blue-50 relative"
-                                    disabled={isProcessing}
-                                >
-                                    <RefreshCw size={14} className={isProcessing ? 'animate-spin' : ''} />
-                                    {isProcessing ? 'Processing...' : 'Reanalyze'}
+                                <div className="relative">
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => setShowReanalyze(!showReanalyze)}
+                                        className="gap-2 text-blue-600 border-blue-200 hover:bg-blue-50"
+                                        disabled={isProcessing}
+                                    >
+                                        <RefreshCw size={14} className={isProcessing ? 'animate-spin' : ''} />
+                                        {isProcessing ? 'Processing...' : 'Reanalyze'}
+                                    </Button>
 
                                     {showReanalyze && (
-                                        <div className="absolute top-full mt-2 right-0 bg-white border border-slate-200 shadow-xl rounded-lg p-3 w-64 z-50 animate-in fade-in slide-in-from-top-2" onClick={(e) => e.stopPropagation()}>
+                                        <div className="absolute top-full mt-2 right-0 bg-white border border-slate-200 shadow-xl rounded-lg p-3 w-64 z-50 animate-in fade-in slide-in-from-top-2">
                                             <p className="text-xs font-semibold text-slate-500 mb-2">Select Correct Document Type:</p>
-                                            <div className="space-y-1">
+                                            <div className="flex flex-col space-y-1">
                                                 {DOC_TYPES.map(type => (
                                                     <button
                                                         key={type}
@@ -186,15 +198,16 @@ export function ExtractionViewer({ data: initialData, file, onSave, onCancel, on
                                                             setSelectedType(type)
                                                             setShowReanalyze(false)
                                                         }}
-                                                        className="w-full text-left px-3 py-2 text-sm rounded-md hover:bg-slate-50 text-slate-700 hover:text-primary transition-colors"
+                                                        className="w-full text-left px-3 py-2 text-sm rounded-md hover:bg-slate-50 text-slate-700 hover:text-primary transition-colors flex items-center justify-between group"
                                                     >
-                                                        {type}
+                                                        <span>{type}</span>
+                                                        {selectedType === type && <Check size={14} className="text-primary opacity-0 group-hover:opacity-100 transition-opacity" />}
                                                     </button>
                                                 ))}
                                             </div>
                                         </div>
                                     )}
-                                </Button>
+                                </div>
                             )}
 
                             <div className="flex bg-slate-100 rounded-lg p-1 mr-2">

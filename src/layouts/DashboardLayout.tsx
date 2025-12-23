@@ -10,31 +10,48 @@ interface DashboardLayoutProps {
     children: React.ReactNode;
 }
 
+import { useLocation } from 'react-router-dom';
+
+// ... imports remain the same
+
 export function DashboardLayout({ children }: DashboardLayoutProps) {
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+    const location = useLocation();
+
+    const getPageTitle = () => {
+        switch (location.pathname) {
+            case '/': return 'Dashboard';
+            case '/documents': return 'Documents';
+            case '/settings': return 'Settings';
+            default: return 'Overview';
+        }
+    };
 
     const handleLogout = async () => {
         await supabase.auth.signOut();
     };
 
     return (
-        <div className="min-h-screen bg-slate-50 flex">
+        <div className="min-h-screen bg-slate-50 flex font-sans">
             {/* Desktop Sidebar */}
-            <aside className="w-64 bg-slate-900 border-r border-slate-800 hidden md:flex flex-col text-slate-300 shadow-xl z-20">
-                <div className="p-6">
+            <aside className="w-64 bg-slate-900 border-r border-slate-800 hidden md:flex flex-col text-slate-300 shadow-xl z-20 relative overflow-hidden">
+                {/* Gradient background effect */}
+                <div className="absolute inset-0 bg-gradient-to-br from-slate-900 via-slate-900 to-violet-950/20 pointer-events-none"></div>
+
+                <div className="p-6 relative z-10">
                     <h2 className="text-2xl font-bold text-white flex items-center gap-2 tracking-tight">
                         <BrainCircuit className="text-violet-500" size={28} />
                         Parseon
                     </h2>
                 </div>
 
-                <nav className="flex-1 px-4 space-y-2 mt-4">
+                <nav className="flex-1 px-4 space-y-2 mt-4 relative z-10">
                     <NavItem icon={<LayoutDashboard size={20} />} label="Dashboard" to="/" />
                     <NavItem icon={<FileText size={20} />} label="Documents" to="/documents" />
                     <NavItem icon={<Settings size={20} />} label="Settings" to="/settings" />
                 </nav>
 
-                <div className="p-4 border-t border-slate-800">
+                <div className="p-4 border-t border-slate-800 relative z-10">
                     <Button
                         variant="ghost"
                         onClick={handleLogout}
@@ -126,12 +143,13 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                     </button>
 
                     <div className="flex-1">
-                        <h1 className="text-xl font-semibold text-slate-800">Overview</h1>
+                        <h1 className="text-xl font-semibold text-slate-800">{getPageTitle()}</h1>
                     </div>
                 </header>
 
-                <div className="flex-1 overflow-auto p-4 md:p-8 bg-slate-50/50">
-                    <div className="max-w-6xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500">
+                <div className="flex-1 overflow-auto p-4 md:p-8 bg-slate-50/50 bg-grid-pattern relative">
+                    {/* Fade overlay for grid at bottom if desired, but let's keep it simple for now */}
+                    <div className="max-w-6xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500 relative z-10">
                         {children}
                     </div>
                 </div>
