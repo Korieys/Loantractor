@@ -1,9 +1,11 @@
+
 import { useState, useRef, useMemo } from 'react'
-import { Edit2, AlertCircle, Copy, Check, ZoomIn, ZoomOut, RotateCcw, FileCode, FileText, AlertTriangle } from 'lucide-react'
+import { Edit2, AlertCircle, Copy, Check, ZoomIn, ZoomOut, RotateCcw, FileCode, FileText, AlertTriangle, RefreshCw } from 'lucide-react'
 import { Button } from '../ui/Button'
 import { Card, CardHeader, CardTitle, CardContent } from '../ui/Card'
 import { Input } from '../ui/Input'
 import { validateExtraction } from '../../services/validation'
+import type { LoanDocType } from './DocTypeSelector'
 
 // Mock interface for extraction data
 interface ExtractedData {
@@ -17,17 +19,28 @@ interface ExtractionViewerProps {
     file: File | null
     onSave: (data: ExtractedData[]) => void
     onCancel: () => void
+    onReanalyze?: (newType: LoanDocType) => void
+    isProcessing?: boolean
 }
 
-export function ExtractionViewer({ data: initialData, file, onSave, onCancel }: ExtractionViewerProps) {
+const DOC_TYPES: LoanDocType[] = ['Pay Stub', 'Bank Statement', 'Tax Return', 'Loan Application', 'Other'];
+
+export function ExtractionViewer({ data: initialData, file, onSave, onCancel, onReanalyze, isProcessing = false }: ExtractionViewerProps) {
     const [data, setData] = useState(initialData)
     const [zoom, setZoom] = useState(1)
     const [pan, setPan] = useState({ x: 0, y: 0 })
     const [isDragging, setIsDragging] = useState(false)
     const [dragStart, setDragStart] = useState({ x: 0, y: 0 })
     const [copiedIndex, setCopiedIndex] = useState<number | null>(null)
+    const [showReanalyze, setShowReanalyze] = useState(false)
+    const [selectedType, setSelectedType] = useState<LoanDocType>('Other')
 
     const imageRef = useRef<HTMLDivElement>(null)
+
+    // Sync data if props change (e.g. after re-analysis)
+    useMemo(() => {
+        setData(initialData);
+    }, [initialData]);
 
     // Run validation on data change
     const validationResult = useMemo(() => validateExtraction(data), [data])
@@ -94,7 +107,7 @@ export function ExtractionViewer({ data: initialData, file, onSave, onCancel }: 
     const fileUrl = file ? URL.createObjectURL(file) : null;
 
     return (
-        <div className="flex flex-col lg:grid lg:grid-cols-2 gap-6 lg:h-[calc(100vh-140px)]">
+        <div className="flex flex-col lg:grid lg:grid-cols-2 gap-6 lg:h-[calc(100vh-140px)] relative">
             {/* Document View */}
             <Card className="h-[50vh] lg:h-full flex flex-col overflow-hidden bg-slate-800 border-slate-700 relative group flex-shrink-0">
                 <CardHeader className="bg-slate-900/50 py-3 px-4 border-b border-slate-700 flex-shrink-0 z-10 w-full">
@@ -150,6 +163,40 @@ export function ExtractionViewer({ data: initialData, file, onSave, onCancel }: 
                             )}
                         </div>
                         <div className="flex items-center gap-2 self-end sm:self-auto">
+                            {onReanalyze && (
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => setShowReanalyze(!showReanalyze)}
+                                    className="gap-2 text-blue-600 border-blue-200 hover:bg-blue-50 relative"
+                                    disabled={isProcessing}
+                                >
+                                    <RefreshCw size={14} className={isProcessing ? 'animate-spin' : ''} />
+                                    {isProcessing ? 'Processing...' : 'Reanalyze'}
+
+                                    {showReanalyze && (
+                                        <div className="absolute top-full mt-2 right-0 bg-white border border-slate-200 shadow-xl rounded-lg p-3 w-64 z-50 animate-in fade-in slide-in-from-top-2" onClick={(e) => e.stopPropagation()}>
+                                            <p className="text-xs font-semibold text-slate-500 mb-2">Select Correct Document Type:</p>
+                                            <div className="space-y-1">
+                                                {DOC_TYPES.map(type => (
+                                                    <button
+                                                        key={type}
+                                                        onClick={() => {
+                                                            onReanalyze(type)
+                                                            setSelectedType(type)
+                                                            setShowReanalyze(false)
+                                                        }}
+                                                        className="w-full text-left px-3 py-2 text-sm rounded-md hover:bg-slate-50 text-slate-700 hover:text-primary transition-colors"
+                                                    >
+                                                        {type}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+                                </Button>
+                            )}
+
                             <div className="flex bg-slate-100 rounded-lg p-1 mr-2">
                                 <button onClick={() => {
                                     const allText = data.map(i => `${i.field}: ${i.value}`).join('\n')
@@ -172,8 +219,16 @@ export function ExtractionViewer({ data: initialData, file, onSave, onCancel }: 
                         </div>
                     </CardTitle>
                 </CardHeader>
-                <CardContent className="flex-1 overflow-auto p-0">
-                    <div className="divide-y divide-slate-100">
+                <CardContent className="flex-1 overflow-auto p-0 relative">
+                    {isProcessing && (
+                        <div className="absolute inset-0 bg-white/80 z-20 flex flex-col items-center justify-center backdrop-blur-sm">
+                            <RefreshCw size={48} className="text-primary animate-spin mb-4" />
+                            <p className="text-lg font-semibold text-slate-800">Reanalyzing Document...</p>
+                            <p className="text-slate-500">Extracting data as {selectedType}</p>
+                        </div>
+                    )}
+
+                    <div className="divide-y divide-slate-100 h-full">
                         {data.map((item, index) => {
                             const fieldError = validationResult.errors.find(e => e.field === item.field)
                             const isError = fieldError?.severity === 'ERROR'

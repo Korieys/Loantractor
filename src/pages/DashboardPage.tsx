@@ -22,6 +22,7 @@ export function DashboardPage() {
     const [currentFile, setCurrentFile] = useState<File | null>(null);
     const [docType, setDocType] = useState<LoanDocType | null>(null);
     const [extractedData, setExtractedData] = useState(MOCK_EXTRACTION_DATA);
+    const [isReanalyzing, setIsReanalyzing] = useState(false);
 
     // Batch flow state
     const [queue, setQueue] = useState<QueueItem[]>([]);
