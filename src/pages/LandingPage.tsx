@@ -1,7 +1,7 @@
 import { Button } from "../components/ui/Button";
 import { ArrowRight, Shield, Zap, FileText, Sparkles, BrainCircuit } from 'lucide-react';
-import { motion, useScroll, useTransform } from 'framer-motion';
-import { useRef, useState } from "react";
+import { motion } from 'framer-motion';
+import { useState } from "react";
 import { ACCOUNT_UNAVAILABLE } from '../services/supabase';
 
 interface LandingPageProps {
@@ -12,14 +12,6 @@ interface LandingPageProps {
 
 export function LandingPage({ onLogin, accountsAvailable = true, sessionError = '' }: LandingPageProps) {
     const [showSample, setShowSample] = useState(false);
-    const targetRef = useRef(null);
-    const { scrollYProgress } = useScroll({
-        target: targetRef,
-        offset: ["start start", "end start"]
-    });
-
-    const opacity = useTransform(scrollYProgress, [0, 0.5], [1, 0]);
-    const scale = useTransform(scrollYProgress, [0, 0.5], [1, 0.9]);
 
     return (
         <div className="min-h-screen bg-[#020617] font-sans text-slate-100 overflow-x-hidden selection:bg-primary/30">
@@ -44,7 +36,7 @@ export function LandingPage({ onLogin, accountsAvailable = true, sessionError = 
             </nav>
 
             {/* Hero Section */}
-            <div ref={targetRef} className="relative pt-32 pb-20 lg:pt-48 lg:pb-32 overflow-hidden">
+            <div className="relative pt-32 pb-20 lg:pt-48 lg:pb-32 overflow-hidden">
                 {/* Background Blobs */}
                 <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full h-full z-0 overflow-hidden pointer-events-none">
                     <motion.div
@@ -62,7 +54,6 @@ export function LandingPage({ onLogin, accountsAvailable = true, sessionError = 
                 </div>
 
                 <motion.div
-                    style={{ opacity, scale }}
                     className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10 text-center"
                 >
                     <motion.div
