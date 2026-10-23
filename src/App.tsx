@@ -21,12 +21,13 @@ function App() {
   useEffect(() => {
     if (!supabase) return;
     let active = true;
+    let authChanged = false;
     supabase.auth.getSession().then(({ data: { session }, error }) => {
-      if (!active) return;
+      if (!active || authChanged) return;
       if (error) throw error;
       setSession(session);
     }).catch(() => {
-      if (active) setSessionError('We could not restore your session. Please sign in again.');
+      if (active && !authChanged) setSessionError('We could not restore your session. Please sign in again.');
     }).finally(() => {
       if (!active) return;
       setIsLoadingSession(false);
@@ -35,7 +36,11 @@ function App() {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!active) return;
+      authChanged = true;
       setSession(session);
+      setSessionError('');
+      setIsLoadingSession(false);
       if (session) setShowAuth(false);
     });
 
@@ -70,7 +75,7 @@ function App() {
   }
 
   return (
-    <DashboardLayout>
+    <DashboardLayout key={session.user.id}>
       <Routes>
         <Route path="/" element={<DashboardPage />} />
         <Route path="/documents" element={<DocumentsPage />} />

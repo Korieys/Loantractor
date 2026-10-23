@@ -25,14 +25,16 @@ function requireSupabase() {
 export async function uploadDocument(
     file: File,
     docType: string,
-    extractedData: any,
+    extractedData: unknown,
     userId: string
 ) {
     const supabase = requireSupabase();
     try {
+        const { data: { user }, error: authError } = await supabase.auth.getUser();
+        if (authError || !user || user.id !== userId) throw new Error('Please sign in again before saving.');
         // 1. Upload file to Storage
         const fileExt = file.name.split('.').pop();
-        const fileName = `${userId}/${Date.now()}.${fileExt}`;
+        const fileName = `${userId}/${crypto.randomUUID()}.${fileExt}`;
         const filePath = fileName;
 
         const { error: uploadError } = await supabase.storage
@@ -42,18 +44,21 @@ export async function uploadDocument(
         if (uploadError) throw uploadError;
 
         // 2. Save metadata to Database
-        const { error: dbError } = await supabase
+        const { data: saved, error: dbError } = await supabase
             .from('documents')
             .insert({
                 user_id: userId,
                 file_path: filePath,
                 doc_type: docType,
                 extracted_data: extractedData
-            });
+            })
+            .select('id')
+            .single();
 
         if (dbError) throw dbError;
+        if (!saved?.id) throw new Error('The save could not be confirmed. Check your Documents library before retrying.');
 
-        return { success: true };
+        return { success: true, id: String(saved.id) };
     } catch (error) {
         logger.error('Error uploading document:', error);
         throw error;
@@ -76,14 +81,14 @@ export async function getUserDocuments(userId: string) {
     return data;
 }
 
-export async function updateDocument(id: string, extractedData: unknown) {
+export async function updateDocument(id: string, extractedData: unknown, docType?: string) {
     const supabase = requireSupabase();
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) throw new Error('Please sign in again before saving.');
 
     const { data, error } = await supabase
         .from('documents')
-        .update({ extracted_data: extractedData })
+        .update({ extracted_data: extractedData, ...(docType ? { doc_type: docType } : {}) })
         .eq('id', id)
         .eq('user_id', user.id)
         .select('id')

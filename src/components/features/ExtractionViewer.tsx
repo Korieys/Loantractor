@@ -241,7 +241,7 @@ export function ExtractionViewer({ data: initialData, file, fileUrl: initialFile
                                     <FileCode size={16} />
                                 </button>
                             </div>
-                            <Button variant="outline" size="sm" onClick={onCancel} disabled={isSaving}>Cancel</Button>
+                            <Button variant="outline" size="sm" onClick={onCancel} disabled={isSaving || isProcessing}>Cancel</Button>
                             <Button size="sm" onClick={() => onSave(data)} disabled={isSaving || isProcessing} aria-busy={isSaving} className="gap-2">
                                 {isSaving ? 'Saving…' : 'Save'}
                             </Button>
