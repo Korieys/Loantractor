@@ -38,6 +38,7 @@ export function DocumentsPage() {
         setIsLoading(true);
         setLoadError('');
         try {
+            if (!supabase) throw new Error('Account features are unavailable.');
             const { data: { session } } = await supabase.auth.getSession();
             if (session?.user) {
                 const docs = await getUserDocuments(session.user.id);

@@ -1,7 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-const mock = vi.hoisted(() => ({
-    getUser: vi.fn(), from: vi.fn(), update: vi.fn(), eq: vi.fn(), select: vi.fn(), single: vi.fn(),
-}));
+const mock = vi.hoisted(() => {
+    vi.stubEnv('VITE_SUPABASE_URL', 'https://test.example.com');
+    vi.stubEnv('VITE_SUPABASE_ANON_KEY', 'synthetic-test-key');
+    return {
+        getUser: vi.fn(), from: vi.fn(), update: vi.fn(), eq: vi.fn(), select: vi.fn(), single: vi.fn(),
+    };
+});
 vi.mock('@supabase/supabase-js', () => ({ createClient: () => ({ auth: { getUser: mock.getUser }, from: mock.from }) }));
 vi.mock('./logger', () => ({ logger: { warn: vi.fn(), error: vi.fn() } }));
 import { updateDocument } from './supabase';

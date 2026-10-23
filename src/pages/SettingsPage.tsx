@@ -17,6 +17,7 @@ export function SettingsPage() {
     }, []);
 
     const loadProfile = async () => {
+        if (!supabase) { setLoading(false); return; }
         const { data: { user } } = await supabase.auth.getUser();
         if (user) {
             setEmail(user.email || '');

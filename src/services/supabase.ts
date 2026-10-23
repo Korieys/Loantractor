@@ -1,17 +1,26 @@
 import { createClient } from '@supabase/supabase-js'
 import { logger } from './logger'
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+export const ACCOUNT_UNAVAILABLE = 'Sign-in, uploads, and saved documents are unavailable on this preview. You can still explore the fictional output sample.';
 
-if (!supabaseUrl || !supabaseAnonKey) {
-    logger.warn('Missing Supabase credentials. Auth and Storage features will not work.')
+function initializeClient() {
+    const url = import.meta.env.VITE_SUPABASE_URL?.trim();
+    const key = import.meta.env.VITE_SUPABASE_ANON_KEY?.trim();
+    if (!url || !key) return null;
+    try {
+        return createClient(url, key);
+    } catch {
+        logger.warn('Supabase configuration is invalid. Account features are unavailable.');
+        return null;
+    }
 }
 
-export const supabase = createClient(
-    supabaseUrl || '',
-    supabaseAnonKey || ''
-)
+export const supabase = initializeClient();
+
+function requireSupabase() {
+    if (!supabase) throw new Error(ACCOUNT_UNAVAILABLE);
+    return supabase;
+}
 
 export async function uploadDocument(
     file: File,
@@ -19,6 +28,7 @@ export async function uploadDocument(
     extractedData: any,
     userId: string
 ) {
+    const supabase = requireSupabase();
     try {
         // 1. Upload file to Storage
         const fileExt = file.name.split('.').pop();
@@ -51,6 +61,7 @@ export async function uploadDocument(
 }
 
 export async function getUserDocuments(userId: string) {
+    const supabase = requireSupabase();
     const { data, error } = await supabase
         .from('documents')
         .select('*')
@@ -66,6 +77,7 @@ export async function getUserDocuments(userId: string) {
 }
 
 export async function updateDocument(id: string, extractedData: unknown) {
+    const supabase = requireSupabase();
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) throw new Error('Please sign in again before saving.');
 
@@ -81,6 +93,7 @@ export async function updateDocument(id: string, extractedData: unknown) {
 }
 
 export async function getSignedUrl(filePath: string) {
+    const supabase = requireSupabase();
     const { data, error } = await supabase.storage
         .from('documents')
         .createSignedUrl(filePath, 60 * 60); // 1 hour expiry
@@ -94,6 +107,7 @@ export async function getSignedUrl(filePath: string) {
 }
 
 export async function deleteDocument(id: string, filePath: string) {
+    const supabase = requireSupabase();
     // 1. Delete from Storage
     const { error: storageError } = await supabase.storage
         .from('documents')
@@ -119,6 +133,7 @@ export async function deleteDocument(id: string, filePath: string) {
 }
 
 export async function updateUserProfile(attributes: { data: { first_name: string, last_name: string } }) {
+    const supabase = requireSupabase();
     const { data, error } = await supabase.auth.updateUser(attributes);
 
     if (error) {

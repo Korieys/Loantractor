@@ -2,12 +2,15 @@ import { Button } from "../components/ui/Button";
 import { ArrowRight, Shield, Zap, FileText, Sparkles, BrainCircuit } from 'lucide-react';
 import { motion, useScroll, useTransform } from 'framer-motion';
 import { useRef, useState } from "react";
+import { ACCOUNT_UNAVAILABLE } from '../services/supabase';
 
 interface LandingPageProps {
     onLogin: () => void;
+    accountsAvailable?: boolean;
+    sessionError?: string;
 }
 
-export function LandingPage({ onLogin }: LandingPageProps) {
+export function LandingPage({ onLogin, accountsAvailable = true, sessionError = '' }: LandingPageProps) {
     const [showSample, setShowSample] = useState(false);
     const targetRef = useRef(null);
     const { scrollYProgress } = useScroll({
@@ -34,7 +37,7 @@ export function LandingPage({ onLogin }: LandingPageProps) {
                             Log in
                         </button>
                         <Button onClick={onLogin} size="sm" className="bg-white text-slate-900 hover:bg-slate-200 border-none">
-                            Get Started
+                            {accountsAvailable ? 'Get Started' : 'Preview access'}
                         </Button>
                     </div>
                 </div>
@@ -96,17 +99,19 @@ export function LandingPage({ onLogin }: LandingPageProps) {
                         className="flex flex-col sm:flex-row items-center justify-center gap-4"
                     >
                         <Button
-                            onClick={onLogin}
+                            onClick={accountsAvailable ? onLogin : () => setShowSample(true)}
                             size="lg"
                             className="h-14 px-8 text-lg bg-violet-600 hover:bg-violet-700 shadow-xl shadow-violet-500/20 border-none ring-offset-2 ring-offset-[#020617] transition-all hover:scale-105"
                         >
-                            Start Extraction
+                            {accountsAvailable ? 'Start Extraction' : 'Explore the sample'}
                             <ArrowRight className="ml-2 w-5 h-5" />
                         </Button>
                         <button onClick={() => setShowSample(value => !value)} aria-expanded={showSample} aria-controls="output-sample" className="group flex items-center gap-2 text-slate-400 hover:text-white px-6 py-3 transition-colors">
                             <span className="border-b border-transparent group-hover:border-white transition-all">View Output Sample</span>
                         </button>
                     </motion.div>
+                    {!accountsAvailable && <p role="status" className="mt-6 mx-auto max-w-2xl text-slate-300">{ACCOUNT_UNAVAILABLE}</p>}
+                    {sessionError && <p role="alert" className="mt-6 mx-auto max-w-2xl text-amber-300">{sessionError}</p>}
                     {showSample && <section id="output-sample" aria-label="Synthetic output sample" className="mt-8 mx-auto max-w-2xl rounded-xl border border-violet-500/30 bg-slate-950 p-6 text-left">
                         <h2 className="text-xl font-bold mb-2">Example output</h2>
                         <p className="text-slate-400 mb-4">Fictional data for illustration. This sample does not upload a document or run an extraction.</p>

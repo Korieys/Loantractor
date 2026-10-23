@@ -67,6 +67,11 @@ export function DashboardPage() {
     };
 
     const handleSave = async (data: typeof MOCK_EXTRACTION_DATA) => {
+        if (!supabase) {
+            setErrorMsg('Saving is unavailable. Your document has not been saved.');
+            setStatus('ERROR');
+            return;
+        }
         const { data: { session } } = await supabase.auth.getSession();
 
         if (!session?.user || !currentFile || !docType) {
@@ -121,6 +126,7 @@ export function DashboardPage() {
                 const data = await extractLoanData(item.file, type);
 
                 // 2. Auto-save (Batch mode = Auto-save for now)
+                if (!supabase) throw new Error('Saving is unavailable. Your document has not been saved.');
                 const { data: { session } } = await supabase.auth.getSession();
                 if (session?.user) {
                     const { uploadDocument } = await import('../services/supabase');
