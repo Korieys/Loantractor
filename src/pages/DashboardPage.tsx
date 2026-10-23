@@ -2,13 +2,12 @@ import { useState } from 'react';
 import { FileUploader } from '../components/features/FileUploader';
 import { DocTypeSelector } from '../components/features/DocTypeSelector';
 import type { LoanDocType } from '../components/features/DocTypeSelector';
-import { MOCK_EXTRACTION_DATA } from '../data/mockExtraction';
-import { extractLoanData } from '../services/openai';
+import { extractLoanData, type ExtractedData } from '../services/openai';
 import { ExtractionViewer } from '../components/features/ExtractionViewer';
 import { ProcessingLoader } from '../components/features/ProcessingLoader';
 import { AnimatePresence, motion } from 'framer-motion';
 import { logger } from '../services/logger';
-import { supabase } from '../services/supabase';
+import { supabase, uploadDocument } from '../services/supabase';
 
 import { BatchQueue } from '../components/features/BatchQueue';
 import type { QueueItem } from '../components/features/BatchQueue';
@@ -21,8 +20,9 @@ export function DashboardPage() {
     // Single file flow state
     const [currentFile, setCurrentFile] = useState<File | null>(null);
     const [docType, setDocType] = useState<LoanDocType | null>(null);
-    const [extractedData, setExtractedData] = useState(MOCK_EXTRACTION_DATA);
+    const [extractedData, setExtractedData] = useState<ExtractedData[]>([]);
     const [isReanalyzing, setIsReanalyzing] = useState(false);
+    const [isSaving, setIsSaving] = useState(false);
 
     // Batch flow state
     const [queue, setQueue] = useState<QueueItem[]>([]);
@@ -61,35 +61,29 @@ export function DashboardPage() {
             setStatus('REVIEW');
         } catch (err) {
             logger.error(err);
-            setErrorMsg("Failed to process document. Please try again.");
+            setErrorMsg(err instanceof Error ? err.message : 'Failed to process document. Please try again.');
             setStatus('ERROR');
         }
     };
 
-    const handleSave = async (data: typeof MOCK_EXTRACTION_DATA) => {
-        if (!supabase) {
-            setErrorMsg('Saving is unavailable. Your document has not been saved.');
-            setStatus('ERROR');
-            return;
-        }
-        const { data: { session } } = await supabase.auth.getSession();
-
-        if (!session?.user || !currentFile || !docType) {
-            logger.error("Missing session or file data for save");
-            return;
-        }
-
+    const handleSave = async (data: ExtractedData[]) => {
+        if (isSaving || isReanalyzing) return;
+        setIsSaving(true);
+        setErrorMsg('');
         try {
-            setStatus('SAVING');
-            const { uploadDocument } = await import('../services/supabase');
+            if (!supabase) throw new Error('Saving is unavailable. Your edits are still here.');
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!session?.user) throw new Error('Please sign in again before saving. Your edits are still here.');
+            if (!currentFile || !docType) throw new Error('The source document is unavailable. Your edits have not been saved.');
             await uploadDocument(currentFile, docType, data, session.user.id);
 
             alert("Document saved successfully!");
             reset();
         } catch (err) {
             logger.error("Save failed:", err);
-            setErrorMsg("Failed to save document to Supabase.");
-            setStatus('ERROR');
+            setErrorMsg(err instanceof Error ? err.message : 'Your document was not saved. Your edits are still here; please retry.');
+        } finally {
+            setIsSaving(false);
         }
     };
 
@@ -106,7 +100,7 @@ export function DashboardPage() {
         // We need to process sequentially to not hit rate limits and for better UX
         // Note: In a real app we might do small chunks of concurrency
 
-        let currentQueue = [...queue];
+        const currentQueue = [...queue];
 
         for (let i = 0; i < currentQueue.length; i++) {
             if (currentQueue[i].status === 'COMPLETED') continue;
@@ -128,10 +122,8 @@ export function DashboardPage() {
                 // 2. Auto-save (Batch mode = Auto-save for now)
                 if (!supabase) throw new Error('Saving is unavailable. Your document has not been saved.');
                 const { data: { session } } = await supabase.auth.getSession();
-                if (session?.user) {
-                    const { uploadDocument } = await import('../services/supabase');
-                    await uploadDocument(item.file, type, data, session.user.id);
-                }
+                if (!session?.user) throw new Error('Sign in again before saving. This document has not been saved.');
+                await uploadDocument(item.file, type, data, session.user.id);
 
                 updateQueueItem(item.id, {
                     status: 'COMPLETED',
@@ -178,7 +170,7 @@ export function DashboardPage() {
         setStatus('IDLE');
         setCurrentFile(null);
         setDocType(null);
-        setExtractedData(MOCK_EXTRACTION_DATA);
+        setExtractedData([]);
         setQueue([]);
         setBatchDocType(null);
         setErrorMsg("");
@@ -323,12 +315,14 @@ export function DashboardPage() {
                         animate={{ opacity: 1, scale: 1 }}
                         className="h-full"
                     >
+                        {errorMsg && <p role="alert" className="mb-4 text-red-700">{errorMsg}</p>}
                         <ExtractionViewer
                             data={extractedData}
                             file={currentFile}
                             onSave={handleSave}
                             onReanalyze={handleReanalyze}
                             isProcessing={isReanalyzing}
+                            isSaving={isSaving}
                             onCancel={() => {
                                 // If we came from batch, return to batch view if items remain
                                 if (queue.length > 0) {

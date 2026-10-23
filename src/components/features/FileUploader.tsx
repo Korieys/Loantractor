@@ -1,10 +1,11 @@
 import { useCallback, useState } from 'react'
-import { useDropzone } from 'react-dropzone'
+import { useDropzone, type FileRejection } from 'react-dropzone'
 import { Upload, File, X, CheckCircle } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { cn } from '../../lib/utils'
 import { Card } from '../ui/Card'
 import { Button } from '../ui/Button'
+import { MAX_FILE_BYTES } from '../../services/openai'
 
 interface FileUploaderProps {
     onFileUpload: (files: File[]) => void
@@ -13,20 +14,35 @@ interface FileUploaderProps {
 export function FileUploader({ onFileUpload }: FileUploaderProps) {
     const [files, setFiles] = useState<File[]>([])
     const [isDragging, setIsDragging] = useState(false)
+    const [error, setError] = useState('')
 
-    const onDrop = useCallback((acceptedFiles: File[]) => {
+    const onDrop = useCallback((acceptedFiles: File[], rejections: FileRejection[]) => {
+        setIsDragging(false)
+        setError('')
+        if (rejections.length) {
+            setError('Choose up to 10 PDF, PNG, JPG or WebP files, no larger than 2 MB each.')
+            return
+        }
+        if (files.length + acceptedFiles.length > 10) {
+            setError('Keep the queue to 10 documents at a time.')
+            return
+        }
         setFiles(prev => [...prev, ...acceptedFiles])
-    }, [])
+    }, [files.length])
 
     const { getRootProps, getInputProps, isDragActive } = useDropzone({
         onDrop,
         accept: {
             'application/pdf': ['.pdf'],
-            'image/*': ['.png', '.jpg', '.jpeg']
+            'image/png': ['.png'],
+            'image/jpeg': ['.jpg', '.jpeg'],
+            'image/webp': ['.webp']
         },
+        maxSize: MAX_FILE_BYTES,
+        minSize: 1,
+        maxFiles: 10,
         onDragEnter: () => setIsDragging(true),
-        onDragLeave: () => setIsDragging(false),
-        onDropAccepted: () => setIsDragging(false)
+        onDragLeave: () => setIsDragging(false)
     })
 
     const removeFile = (index: number) => {
@@ -61,10 +77,12 @@ export function FileUploader({ onFileUpload }: FileUploaderProps) {
                         {isDragActive ? "Drop files here" : "Upload Borrower Documents (Batch Supported)"}
                     </h3>
                     <p className="text-sm text-slate-500 mt-1">
-                        Drag and drop or click to browse (PDF, PNG, JPG)
+                        PDF, PNG, JPG or WebP · Up to 2 MB each · 10 files per queue
                     </p>
                 </div>
             </Card>
+            <p className="text-sm text-slate-600">Processing sends the selected document to OpenAI to prepare draft fields. Saved documents are stored in your account. Use only documents you are authorized to process, and check every value against the original before use.</p>
+            {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
 
             <AnimatePresence>
                 {files.length > 0 && (
@@ -93,6 +111,7 @@ export function FileUploader({ onFileUpload }: FileUploaderProps) {
                                     </div>
                                 </div>
                                 <button
+                                    aria-label={`Remove ${file.name}`}
                                     onClick={(e) => { e.stopPropagation(); removeFile(idx); }}
                                     className="p-1 hover:bg-slate-100 rounded-full text-slate-400 hover:text-red-500 transition-colors"
                                 >

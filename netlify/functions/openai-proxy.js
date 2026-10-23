@@ -1,34 +1,8 @@
-
-export async function handler(event, context) {
-    // Only allow POST
-    if (event.httpMethod !== "POST") {
-        return { statusCode: 405, body: "Method Not Allowed" };
-    }
-
-    try {
-        const body = JSON.parse(event.body);
-
-        // Call OpenAI API
-        const response = await fetch("https://api.openai.com/v1/chat/completions", {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`
-            },
-            body: JSON.stringify(body)
-        });
-
-        const data = await response.json();
-
-        return {
-            statusCode: response.status,
-            body: JSON.stringify(data)
-        };
-    } catch (error) {
-        console.error("OpenAI Proxy Error:", error);
-        return {
-            statusCode: 500,
-            body: JSON.stringify({ error: "Failed to communicate with OpenAI" })
-        };
-    }
+import {extractionService,extractionFailure} from '../../server/extraction.js';
+export async function handler(event){
+ const headers={'Content-Type':'application/json','Cache-Control':'private, no-store'};
+ if(event.httpMethod!=='POST')return {statusCode:405,headers:{...headers,Allow:'POST'},body:JSON.stringify({error:'Method not allowed'})};
+ if(event.isBase64Encoded)return {statusCode:400,headers,body:JSON.stringify({error:'Send a JSON document request.'})};
+ try{return {statusCode:200,headers,body:JSON.stringify(await extractionService()({authorization:event.headers?.authorization || event.headers?.Authorization,body:event.body}))};}
+ catch(error){const result=extractionFailure(error);return {statusCode:result.status,headers:{...headers,...(result.status===429?{'Retry-After':'30'}:{})},body:JSON.stringify(result.body)};}
 }

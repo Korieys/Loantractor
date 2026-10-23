@@ -214,6 +214,7 @@ export function DocumentsPage() {
                                 data={selectedDoc.extracted_data || []}
                                 file={null} // We don't have the File object, only URL
                                 fileUrl={viewUrl}
+                                fileName={selectedDoc.file_path.split('/').pop()}
                                 isSaving={isSaving}
                                 onSave={async data => {
                                     if (isSaving) return;
