@@ -22,11 +22,12 @@ interface ExtractionViewerProps {
     onCancel: () => void
     onReanalyze?: (newType: LoanDocType) => void
     isProcessing?: boolean
+    isSaving?: boolean
 }
 
 const DOC_TYPES: LoanDocType[] = ['Pay Stub', 'Bank Statement', 'Tax Return', 'Loan Application', 'Other'];
 
-export function ExtractionViewer({ data: initialData, file, fileUrl: initialFileUrl, onSave, onCancel, onReanalyze, isProcessing = false }: ExtractionViewerProps) {
+export function ExtractionViewer({ data: initialData, file, fileUrl: initialFileUrl, onSave, onCancel, onReanalyze, isProcessing = false, isSaving = false }: ExtractionViewerProps) {
     const [data, setData] = useState(initialData)
     const [zoom, setZoom] = useState(1)
     const [pan, setPan] = useState({ x: 0, y: 0 })
@@ -225,9 +226,9 @@ export function ExtractionViewer({ data: initialData, file, fileUrl: initialFile
                                     <FileCode size={16} />
                                 </button>
                             </div>
-                            <Button variant="outline" size="sm" onClick={onCancel}>Cancel</Button>
-                            <Button size="sm" onClick={() => onSave(data)} className="gap-2">
-                                Save
+                            <Button variant="outline" size="sm" onClick={onCancel} disabled={isSaving}>Cancel</Button>
+                            <Button size="sm" onClick={() => onSave(data)} disabled={isSaving} aria-busy={isSaving} className="gap-2">
+                                {isSaving ? 'Saving…' : 'Save'}
                             </Button>
                         </div>
                     </CardTitle>
@@ -277,6 +278,7 @@ export function ExtractionViewer({ data: initialData, file, fileUrl: initialFile
                                         <div className="relative flex-1">
                                             <Input
                                                 value={item.value}
+                                                disabled={isSaving}
                                                 onChange={(e) => handleFieldChange(index, e.target.value)}
                                                 className={cn(
                                                     "transition-all font-medium text-slate-900 pr-8",

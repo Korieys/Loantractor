@@ -1,7 +1,7 @@
-import { FileText, Search, Filter, Download, ExternalLink, Trash2 } from 'lucide-react';
+import { FileText, Search, Download, ExternalLink, Trash2 } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { useEffect, useState } from 'react';
-import { supabase, getUserDocuments, getSignedUrl, deleteDocument } from '../services/supabase';
+import { supabase, getUserDocuments, getSignedUrl, deleteDocument, updateDocument } from '../services/supabase';
 import { useNavigate } from 'react-router-dom';
 import { ExtractionViewer } from '../components/features/ExtractionViewer';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -19,6 +19,15 @@ export function DocumentsPage() {
     const [isLoading, setIsLoading] = useState(true);
     const [selectedDoc, setSelectedDoc] = useState<Document | null>(null);
     const [viewUrl, setViewUrl] = useState<string | null>(null);
+    const [query, setQuery] = useState('');
+    const [docType, setDocType] = useState('');
+    const [loadError, setLoadError] = useState('');
+    const [saveError, setSaveError] = useState('');
+    const [isSaving, setIsSaving] = useState(false);
+    const filteredDocuments = documents.filter(doc =>
+        (!docType || doc.doc_type === docType) &&
+        `${doc.file_path.split('/').pop()} ${doc.doc_type}`.toLowerCase().includes(query.trim().toLowerCase())
+    );
     const navigate = useNavigate();
 
     useEffect(() => {
@@ -26,6 +35,8 @@ export function DocumentsPage() {
     }, []);
 
     const loadDocuments = async () => {
+        setIsLoading(true);
+        setLoadError('');
         try {
             const { data: { session } } = await supabase.auth.getSession();
             if (session?.user) {
@@ -33,7 +44,7 @@ export function DocumentsPage() {
                 setDocuments(docs || []);
             }
         } catch (error) {
-            console.error(error);
+            setLoadError('We could not load your documents. Please try again.');
         } finally {
             setIsLoading(false);
         }
@@ -44,6 +55,7 @@ export function DocumentsPage() {
             const url = await getSignedUrl(doc.file_path);
             setViewUrl(url);
             setSelectedDoc(doc);
+            setSaveError('');
         } catch (error) {
             alert('Failed to load document');
         }
@@ -73,9 +85,11 @@ export function DocumentsPage() {
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
+        URL.revokeObjectURL(url);
     };
 
     const handleCloseViewer = () => {
+        if (isSaving) return;
         setSelectedDoc(null);
         setViewUrl(null);
     }
@@ -98,6 +112,7 @@ export function DocumentsPage() {
                     </Button>
                 </div>
             </header>
+            {loadError && <div role="alert" className="text-red-700">{loadError} <Button variant="outline" onClick={loadDocuments}>Retry</Button></div>}
 
             {/* Filters & Search - Stacked on mobile */}
             <div className="bg-white p-4 rounded-lg border border-slate-200 flex flex-col md:flex-row gap-4">
@@ -105,14 +120,17 @@ export function DocumentsPage() {
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                     <input
                         type="text"
+                        aria-label="Search documents"
+                        value={query}
+                        onChange={event => setQuery(event.target.value)}
                         placeholder="Search documents..."
                         className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
                     />
                 </div>
-                <Button variant="outline" className="flex items-center gap-2 justify-center">
-                    <Filter size={18} />
-                    Filter
-                </Button>
+                <select aria-label="Filter by document type" value={docType} onChange={event => setDocType(event.target.value)} className="border border-slate-200 rounded-md px-3 py-2">
+                    <option value="">All document types</option>
+                    {[...new Set(documents.map(doc => doc.doc_type).filter(Boolean))].sort().map(type => <option key={type} value={type}>{type}</option>)}
+                </select>
             </div>
 
             {/* Documents List - Scrolls on mobile */}
@@ -131,10 +149,10 @@ export function DocumentsPage() {
                         <tbody className="divide-y divide-slate-100">
                             {isLoading ? (
                                 <tr><td colSpan={5} className="p-8 text-center text-slate-500">Loading documents...</td></tr>
-                            ) : documents.length === 0 ? (
-                                <tr><td colSpan={5} className="p-8 text-center text-slate-500">No documents found. Upload one to get started!</td></tr>
+                            ) : filteredDocuments.length === 0 ? (
+                                <tr><td colSpan={5} className="p-8 text-center text-slate-500">{loadError ? 'Documents unavailable.' : documents.length ? 'No documents match your search or filter.' : 'No documents found. Upload one to get started!'}</td></tr>
                             ) : (
-                                documents.map((doc) => (
+                                filteredDocuments.map((doc) => (
                                     <tr key={doc.id} className="hover:bg-slate-50 transition-colors">
                                         <td className="px-6 py-4 font-medium text-slate-800 flex items-center gap-3">
                                             <div className="w-8 h-8 rounded bg-primary/10 text-primary flex items-center justify-center shrink-0">
@@ -189,13 +207,27 @@ export function DocumentsPage() {
                                 <h3 className="text-xl font-bold text-slate-900">Document Review</h3>
                             </div>
 
+                            {saveError && <p role="alert" className="mb-4 text-red-700">{saveError}</p>}
                             <ExtractionViewer
+                                key={selectedDoc.id}
                                 data={selectedDoc.extracted_data || []}
                                 file={null} // We don't have the File object, only URL
                                 fileUrl={viewUrl}
-                                onSave={() => {
-                                    handleCloseViewer();
-                                    // TODO: Implement update save logic
+                                isSaving={isSaving}
+                                onSave={async data => {
+                                    if (isSaving) return;
+                                    setIsSaving(true);
+                                    setSaveError('');
+                                    try {
+                                        await updateDocument(selectedDoc.id, data);
+                                        setDocuments(docs => docs.map(doc => doc.id === selectedDoc.id ? { ...doc, extracted_data: data } : doc));
+                                        setSelectedDoc(null);
+                                        setViewUrl(null);
+                                    } catch {
+                                        setSaveError('Your changes were not saved. They are still here; please try again.');
+                                    } finally {
+                                        setIsSaving(false);
+                                    }
                                 }}
                                 onCancel={handleCloseViewer}
                             />
