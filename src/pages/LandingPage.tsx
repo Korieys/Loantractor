@@ -1,13 +1,14 @@
 import { Button } from "../components/ui/Button";
 import { ArrowRight, Shield, Zap, FileText, Sparkles, BrainCircuit } from 'lucide-react';
 import { motion, useScroll, useTransform } from 'framer-motion';
-import { useRef } from "react";
+import { useRef, useState } from "react";
 
 interface LandingPageProps {
     onLogin: () => void;
 }
 
 export function LandingPage({ onLogin }: LandingPageProps) {
+    const [showSample, setShowSample] = useState(false);
     const targetRef = useRef(null);
     const { scrollYProgress } = useScroll({
         target: targetRef,
@@ -68,7 +69,7 @@ export function LandingPage({ onLogin }: LandingPageProps) {
                         className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-violet-500/30 bg-violet-500/10 text-violet-300 text-sm font-medium mb-8 backdrop-blur-sm"
                     >
                         <Sparkles size={14} className="text-amber-400" />
-                        <span>Powered by GPT-4o Vision</span>
+                        <span>AI-assisted document extraction</span>
                     </motion.div>
 
                     <h1 className="text-4xl sm:text-5xl md:text-7xl lg:text-8xl font-extrabold tracking-tight mb-8">
@@ -84,8 +85,8 @@ export function LandingPage({ onLogin }: LandingPageProps) {
                         transition={{ duration: 0.6, delay: 0.2 }}
                         className="text-lg md:text-xl text-slate-400 max-w-2xl mx-auto mb-12 leading-relaxed"
                     >
-                        Parseon turns messy documents into structured data instantly.
-                        No templates, no training—just upload and get pure JSON.
+                        Turn documents into structured fields you can review, correct, and export.
+                        Check every result against the original before using it.
                     </motion.p>
 
                     <motion.div
@@ -102,10 +103,16 @@ export function LandingPage({ onLogin }: LandingPageProps) {
                             Start Extraction
                             <ArrowRight className="ml-2 w-5 h-5" />
                         </Button>
-                        <button onClick={onLogin} className="group flex items-center gap-2 text-slate-400 hover:text-white px-6 py-3 transition-colors">
+                        <button onClick={() => setShowSample(value => !value)} aria-expanded={showSample} aria-controls="output-sample" className="group flex items-center gap-2 text-slate-400 hover:text-white px-6 py-3 transition-colors">
                             <span className="border-b border-transparent group-hover:border-white transition-all">View Output Sample</span>
                         </button>
                     </motion.div>
+                    {showSample && <section id="output-sample" aria-label="Synthetic output sample" className="mt-8 mx-auto max-w-2xl rounded-xl border border-violet-500/30 bg-slate-950 p-6 text-left">
+                        <h2 className="text-xl font-bold mb-2">Example output</h2>
+                        <p className="text-slate-400 mb-4">Fictional data for illustration. This sample does not upload a document or run an extraction.</p>
+                        <pre className="overflow-x-auto text-sm text-violet-200" tabIndex={0} aria-label="Sample JSON output">{JSON.stringify({ document_type: 'Sample invoice', supplier: 'Example Studio', invoice_number: 'DEMO-001', currency: 'USD', total: '125.00' }, null, 2)}</pre>
+                        <p className="mt-4 text-sm text-slate-400">Real results depend on document quality and require your review.</p>
+                    </section>}
                 </motion.div>
 
                 {/* Floating UI Mockup */}
@@ -161,24 +168,24 @@ export function LandingPage({ onLogin }: LandingPageProps) {
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                     <div className="text-center mb-16">
                         <h2 className="text-3xl md:text-5xl font-bold mb-4 text-white">Why Parseon?</h2>
-                        <p className="text-slate-400 text-lg max-w-2xl mx-auto">Built for heavy-duty financial processing with a level of precision typical OCR can't match.</p>
+                        <p className="text-slate-400 text-lg max-w-2xl mx-auto">A workflow for extracting fields, reviewing the source, and preparing structured output.</p>
                     </div>
 
                     <div className="grid md:grid-cols-3 gap-8">
                         <FeatureCard
                             icon={<Zap className="w-6 h-6 text-amber-400" />}
-                            title="Zero-Shot Extraction"
-                            desc="No training required. Provide any document type, and our semantic engine understands the context immediately."
+                            title="Document extraction"
+                            desc="Choose a supported document type and extract a draft set of fields for review."
                         />
                         <FeatureCard
                             icon={<Shield className="w-6 h-6 text-emerald-400" />}
-                            title="SOC2 Ready Security"
-                            desc="Your data is encrypted, processed in a secure enclave, and wiped after processing unless saved by you."
+                            title="Review before use"
+                            desc="Compare extracted fields with the original document and correct them before saving or exporting."
                         />
                         <FeatureCard
                             icon={<BrainCircuit className="w-6 h-6 text-violet-400" />}
-                            title="Reasoning Engine"
-                            desc="Parseon doesn't just read text; it understands it. It corrects OCR errors using financial context."
+                            title="Structured output"
+                            desc="Export reviewed fields as JSON or CSV for the next step in your workflow."
                         />
                     </div>
                 </div>

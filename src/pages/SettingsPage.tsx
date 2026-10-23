@@ -122,7 +122,7 @@ export function SettingsPage() {
                         <Database size={20} className="text-primary" />
                         Data Integrations
                     </h3>
-                    <p className="text-sm text-slate-600 mb-4">Connect Loantractor to your existing LOS or CRM.</p>
+                    <p className="text-sm text-slate-600 mb-4">Connect Parseon to your existing LOS or CRM.</p>
                     <div className="flex gap-3">
                         <Button variant="outline">Connect Encompass</Button>
                         <Button variant="outline">Connect Salesforce</Button>

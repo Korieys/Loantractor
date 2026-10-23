@@ -49,7 +49,7 @@ function App() {
           </button>
           <div className="w-full max-w-md space-y-8">
             <div className="text-center">
-              <h1 className="text-4xl font-extrabold text-blue-900 tracking-tight">Loantractor</h1>
+              <h1 className="text-4xl font-extrabold text-blue-900 tracking-tight">Parseon</h1>
               <p className="text-slate-500 mt-2">Sign in to your dashboard</p>
             </div>
             <AuthForm onSuccess={() => { }} />
