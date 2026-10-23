@@ -24,8 +24,8 @@ export function LandingPage({ onLogin, accountsAvailable = true, sessionError = 
                         </div>
                         <span className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-slate-400 tracking-tight">Parseon</span>
                     </div>
-                    <div className="flex items-center gap-6">
-                        <button onClick={onLogin} className="text-sm font-medium text-slate-400 hover:text-white transition-colors">
+                    <div className="flex items-center gap-3 sm:gap-6 pl-3 shrink-0">
+                        <button onClick={onLogin} className="hidden sm:inline-flex text-sm font-medium text-slate-400 hover:text-white transition-colors">
                             Log in
                         </button>
                         <Button onClick={onLogin} size="sm" className="bg-white text-slate-900 hover:bg-slate-200 border-none">
