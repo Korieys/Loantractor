@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { DocumentsPage } from './DocumentsPage';
 
@@ -32,7 +32,7 @@ describe('customer document workflow', () => {
         fireEvent.change(screen.getByLabelText('Search documents'), { target: { value: 'INCOME' } });
         expect(screen.queryByText('tax.pdf')).toBeNull();
         fireEvent.change(screen.getByLabelText('Filter by document type'), { target: { value: 'Tax Return' } });
-        expect(screen.getByText('No documents match your search or filter.')).toBeTruthy();
+        expect(screen.getAllByText('No documents match your search or filter.')).toHaveLength(2);
     });
     it('keeps corrections open after failure and closes only after a confirmed save', async () => {
         await open();
@@ -44,6 +44,14 @@ describe('customer document workflow', () => {
         fireEvent.click(screen.getByText('Save correction'));
         await waitFor(() => expect(screen.queryByText('Save correction')).toBeNull());
         expect(mocks.save).toHaveBeenCalledWith('one', [{ field: 'Total', value: '42', confidence: 1 }]);
+    });
+    it('gives each document labelled review and delete actions in the phone layout', async () => {
+        await open();
+        const phoneList = within(screen.getByRole('list', { name: 'Saved documents' }));
+        expect(phoneList.getAllByRole('listitem')).toHaveLength(2);
+        expect(phoneList.getByRole('button', { name: /^Delete Tax Return from/ })).toBeTruthy();
+        fireEvent.click(phoneList.getByRole('button', { name: /^Review Pay Stub from/ }));
+        expect(await screen.findByText('Save correction')).toBeTruthy();
     });
     it('shows a retry instead of an empty library after a load failure', async () => {
         mocks.list.mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce(docs);

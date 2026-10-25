@@ -11,6 +11,8 @@ export interface QueueItem {
     status: 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'ERROR'
     result?: ExtractedData[]
     documentId?: string
+    /** Reused by every save retry so an unconfirmed save cannot create a duplicate. */
+    saveKey?: string
     error?: string
     docType?: LoanDocType
 }

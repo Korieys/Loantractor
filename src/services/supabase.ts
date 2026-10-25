@@ -22,47 +22,73 @@ function requireSupabase() {
     return supabase;
 }
 
+export const SAVE_UNCONFIRMED = 'The save could not be confirmed. Retry to finish it; a retry will not create a duplicate.';
+
+// A save key is created once per document and reused by every retry, so it doubles as the storage path's idempotency key.
+export function documentPath(userId: string, saveKey: string, file: File) {
+    const ext = file.name.includes('.') ? file.name.split('.').pop()!.toLowerCase().replace(/[^a-z0-9]/g, '') : '';
+    return `${userId}/${saveKey}${ext ? `.${ext}` : ''}`;
+}
+
+// PostgREST and Storage report a status when the server answered; a missing status means the write may or may not have landed.
+const answered = (error: unknown) => {
+    const status = Number((error as { status?: unknown; statusCode?: unknown })?.status ?? (error as { statusCode?: unknown })?.statusCode);
+    return Number.isFinite(status) && status > 0;
+};
+const alreadyExists = (error: unknown) => {
+    const { status, statusCode, message } = (error ?? {}) as { status?: unknown; statusCode?: unknown; message?: unknown };
+    return String(status) === '409' || String(statusCode) === '409' || /already exists|duplicate/i.test(String(message ?? ''));
+};
+
 export async function uploadDocument(
     file: File,
     docType: string,
     extractedData: unknown,
-    userId: string
+    userId: string,
+    saveKey: string = crypto.randomUUID()
 ) {
     const supabase = requireSupabase();
-    try {
-        const { data: { user }, error: authError } = await supabase.auth.getUser();
-        if (authError || !user || user.id !== userId) throw new Error('Please sign in again before saving.');
-        // 1. Upload file to Storage
-        const fileExt = file.name.split('.').pop();
-        const fileName = `${userId}/${crypto.randomUUID()}.${fileExt}`;
-        const filePath = fileName;
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError || !user || user.id !== userId) throw new Error('Please sign in again before saving.');
+    const filePath = documentPath(userId, saveKey, file);
 
-        const { error: uploadError } = await supabase.storage
+    // 1. Store the original. A retry after an unconfirmed upload finds the same object already present.
+    const { error: uploadError } = await supabase.storage.from('documents').upload(filePath, file, { upsert: false });
+    if (uploadError && !alreadyExists(uploadError)) {
+        logger.error('Error uploading document:', uploadError);
+        throw new Error(answered(uploadError) ? 'The document file could not be stored. Your fields are still here; please retry.' : SAVE_UNCONFIRMED);
+    }
+
+    // 2. Record the metadata. The unique file path turns a repeated insert into a confirmation of the earlier save.
+    const { data: saved, error: dbError, status } = await supabase
+        .from('documents')
+        .insert({ user_id: userId, file_path: filePath, doc_type: docType, extracted_data: extractedData })
+        .select('id')
+        .single();
+    if (!dbError && saved?.id) return { success: true, id: String(saved.id) };
+
+    if ((dbError as { code?: string } | null)?.code === '23505') {
+        const { data: existing, error: lookupError } = await supabase
             .from('documents')
-            .upload(filePath, file);
-
-        if (uploadError) throw uploadError;
-
-        // 2. Save metadata to Database
-        const { data: saved, error: dbError } = await supabase
-            .from('documents')
-            .insert({
-                user_id: userId,
-                file_path: filePath,
-                doc_type: docType,
-                extracted_data: extractedData
-            })
+            .update({ extracted_data: extractedData, doc_type: docType })
+            .eq('file_path', filePath)
+            .eq('user_id', userId)
             .select('id')
             .single();
-
-        if (dbError) throw dbError;
-        if (!saved?.id) throw new Error('The save could not be confirmed. Check your Documents library before retrying.');
-
-        return { success: true, id: String(saved.id) };
-    } catch (error) {
-        logger.error('Error uploading document:', error);
-        throw error;
+        if (!lookupError && existing?.id) return { success: true, id: String(existing.id) };
+        logger.error('Error confirming an earlier save:', lookupError);
+        throw new Error(SAVE_UNCONFIRMED);
     }
+
+    logger.error('Error saving document metadata:', dbError);
+    if (dbError && status >= 400 && status < 500 && status !== 408) {
+        // The database refused the record, so no row references the file; remove it rather than leave an orphan.
+        // Timeouts and 5xx gateway answers may follow a committed insert, so they keep the file for a safe retry.
+        const { error: cleanupError } = await supabase.storage.from('documents').remove([filePath]);
+        if (cleanupError) logger.error('Error removing unsaved document file:', cleanupError);
+        throw new Error('The document could not be saved. Your fields are still here; please retry.');
+    }
+    throw new Error(SAVE_UNCONFIRMED);
 }
 
 export async function getUserDocuments(userId: string) {
@@ -113,7 +139,9 @@ export async function getSignedUrl(filePath: string) {
 
 export async function deleteDocument(id: string, filePath: string) {
     const supabase = requireSupabase();
-    // 1. Delete from Storage
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError || !user) throw new Error('Please sign in again before deleting.');
+    // 1. Delete from Storage first: removing an already-missing file succeeds, so a failed row delete is safe to retry.
     const { error: storageError } = await supabase.storage
         .from('documents')
         .remove([filePath]);
@@ -124,14 +152,16 @@ export async function deleteDocument(id: string, filePath: string) {
     }
 
     // 2. Delete from Database
-    const { error: dbError } = await supabase
+    const { data: deleted, error: dbError } = await supabase
         .from('documents')
         .delete()
-        .eq('id', id);
+        .eq('id', id)
+        .eq('user_id', user.id)
+        .select('id');
 
-    if (dbError) {
+    if (dbError || !deleted?.length) {
         logger.error('Error deleting record from database:', dbError);
-        throw dbError;
+        throw new Error('The document could not be deleted. Please retry.');
     }
 
     return { success: true };

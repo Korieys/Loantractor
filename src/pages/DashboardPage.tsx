@@ -29,6 +29,7 @@ export function DashboardPage() {
     const [reviewQueueId, setReviewQueueId] = useState<string | null>(null);
     const mounted = useRef(true);
     const busy = useRef(false);
+    const singleSaveKey = useRef<string | null>(null);
     useEffect(() => {
         mounted.current = true;
         return () => { mounted.current = false; };
@@ -42,6 +43,7 @@ export function DashboardPage() {
         setErrorMsg('');
 
         if (files.length === 1) {
+            singleSaveKey.current = crypto.randomUUID();
             setCurrentFile(files[0]);
             setStatus('SELECT_TYPE');
         } else {
@@ -98,7 +100,8 @@ export function DashboardPage() {
                 setReviewQueueId(null);
                 setStatus('BATCH_COMPLETE');
             } else {
-                await uploadDocument(currentFile, docType, data, session.user.id);
+                singleSaveKey.current ??= crypto.randomUUID();
+                await uploadDocument(currentFile, docType, data, session.user.id, singleSaveKey.current);
                 if (!mounted.current) return;
                 alert('Document saved successfully!');
                 reset();
@@ -138,7 +141,9 @@ export function DashboardPage() {
                 const { data: { session } } = await supabase.auth.getSession();
                 if (!mounted.current) break;
                 if (!session?.user) throw new Error('Sign in again before saving. This document has not been saved.');
-                const saved = await uploadDocument(item.file, type, data, session.user.id);
+                const saveKey = item.saveKey ?? crypto.randomUUID();
+                updateQueueItem(item.id, { saveKey });
+                const saved = await uploadDocument(item.file, type, data, session.user.id, saveKey);
                 if (!mounted.current) break;
 
                 updateQueueItem(item.id, {
@@ -191,6 +196,7 @@ export function DashboardPage() {
         setQueue([]);
         setReviewQueueId(null);
         setErrorMsg("");
+        singleSaveKey.current = null;
     };
 
     const handleReanalyze = async (newType: LoanDocType) => {

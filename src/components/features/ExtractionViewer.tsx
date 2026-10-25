@@ -188,7 +188,7 @@ export function ExtractionViewer({ data: initialData, file, fileUrl: initialFile
                                 </span>
                             )}
                         </div>
-                        <div className="flex items-center gap-2 self-end sm:self-auto">
+                        <div className="flex flex-wrap items-center gap-2 sm:justify-end">
                             {onReanalyze && (
                                 <div className="relative">
                                     <Button
@@ -203,7 +203,7 @@ export function ExtractionViewer({ data: initialData, file, fileUrl: initialFile
                                     </Button>
 
                                     {showReanalyze && (
-                                        <div className="absolute top-full mt-2 right-0 bg-white border border-slate-200 shadow-xl rounded-lg p-3 w-64 z-50 animate-in fade-in slide-in-from-top-2">
+                                        <div className="absolute top-full mt-2 left-0 sm:left-auto sm:right-0 bg-white border border-slate-200 shadow-xl rounded-lg p-3 w-64 z-50 animate-in fade-in slide-in-from-top-2">
                                             <p className="text-xs font-semibold text-slate-500 mb-2">Select Correct Document Type:</p>
                                             <div className="flex flex-col space-y-1">
                                                 {DOC_TYPES.map(type => (
@@ -226,18 +226,18 @@ export function ExtractionViewer({ data: initialData, file, fileUrl: initialFile
                                 </div>
                             )}
 
-                            <div className="flex bg-slate-100 rounded-lg p-1 mr-2">
+                            <div className="flex bg-slate-100 rounded-lg p-1">
                                 <button onClick={() => {
                                     const allText = data.map(i => `${i.field}: ${i.value}`).join('\n')
                                     navigator.clipboard.writeText(allText)
                                     alert("All extracted data copied to clipboard!")
-                                }} className="p-1.5 hover:bg-white rounded-md text-slate-500 hover:text-slate-700 shadow-sm transition-all" title="Copy All to Clipboard">
+                                }} className="p-2 sm:p-1.5 hover:bg-white rounded-md text-slate-500 hover:text-slate-700 shadow-sm transition-all" title="Copy All to Clipboard" aria-label="Copy all fields">
                                     <Copy size={16} />
                                 </button>
-                                <button onClick={() => handleExport('csv')} className="p-1.5 hover:bg-white rounded-md text-slate-500 hover:text-slate-700 shadow-sm transition-all" title="Export to CSV">
+                                <button onClick={() => handleExport('csv')} className="p-2 sm:p-1.5 hover:bg-white rounded-md text-slate-500 hover:text-slate-700 shadow-sm transition-all" title="Export to CSV" aria-label="Export CSV">
                                     <FileText size={16} />
                                 </button>
-                                <button onClick={() => handleExport('json')} className="p-1.5 hover:bg-white rounded-md text-slate-500 hover:text-slate-700 shadow-sm transition-all" title="Export to JSON">
+                                <button onClick={() => handleExport('json')} className="p-2 sm:p-1.5 hover:bg-white rounded-md text-slate-500 hover:text-slate-700 shadow-sm transition-all" title="Export to JSON" aria-label="Export JSON">
                                     <FileCode size={16} />
                                 </button>
                             </div>

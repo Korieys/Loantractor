@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { supabase, getUserDocuments, getSignedUrl, deleteDocument, updateDocument } from '../services/supabase';
 import { useNavigate } from 'react-router-dom';
 import { ExtractionViewer } from '../components/features/ExtractionViewer';
+import type { ExtractedData } from '../services/openai';
 import { motion, AnimatePresence } from 'framer-motion';
 
 interface Document {
@@ -11,7 +12,7 @@ interface Document {
     doc_type: string;
     created_at: string;
     file_path: string;
-    extracted_data: any;
+    extracted_data: ExtractedData[] | null;
 }
 
 export function DocumentsPage() {
@@ -44,7 +45,7 @@ export function DocumentsPage() {
                 const docs = await getUserDocuments(session.user.id);
                 setDocuments(docs || []);
             }
-        } catch (error) {
+        } catch {
             setLoadError('We could not load your documents. Please try again.');
         } finally {
             setIsLoading(false);
@@ -57,7 +58,7 @@ export function DocumentsPage() {
             setViewUrl(url);
             setSelectedDoc(doc);
             setSaveError('');
-        } catch (error) {
+        } catch {
             alert('Failed to load document');
         }
     };
@@ -70,7 +71,7 @@ export function DocumentsPage() {
             // Optimistic update
             setDocuments(docs => docs.filter(d => d.id !== id));
         } catch (error) {
-            alert('Failed to delete document');
+            alert(error instanceof Error ? error.message : 'Failed to delete document');
         }
     };
 
@@ -97,12 +98,12 @@ export function DocumentsPage() {
 
     return (
         <div className="space-y-6 relative min-h-screen">
-            <header className="flex justify-between items-center">
+            <header className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
                 <div>
                     <h2 className="text-2xl font-bold text-slate-800">Documents</h2>
                     <p className="text-slate-500">Manage and review your processed documents.</p>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
                     <Button variant="outline" onClick={handleExport} disabled={documents.length === 0}>
                         <Download size={16} className="mr-2" />
                         Export JSON
@@ -134,8 +135,32 @@ export function DocumentsPage() {
                 </select>
             </div>
 
-            {/* Documents List - Scrolls on mobile */}
-            <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
+            {/* Phone layout: one card per document keeps every action on screen */}
+            <ul className="md:hidden space-y-3" aria-label="Saved documents">
+                {isLoading ? (
+                    <li className="bg-white rounded-lg border border-slate-200 p-6 text-center text-slate-500">Loading documents...</li>
+                ) : filteredDocuments.length === 0 ? (
+                    <li className="bg-white rounded-lg border border-slate-200 p-6 text-center text-slate-500">{loadError ? 'Documents unavailable.' : documents.length ? 'No documents match your search or filter.' : 'No documents found. Upload one to get started!'}</li>
+                ) : filteredDocuments.map(doc => (
+                    <li key={doc.id} className="bg-white rounded-lg border border-slate-200 p-4 flex items-center gap-3">
+                        <div className="w-10 h-10 rounded bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                            <FileText size={18} />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                            <p className="font-medium text-slate-800">{doc.doc_type || 'Unknown'}</p>
+                            <p className="text-xs text-slate-500 truncate">{new Date(doc.created_at).toLocaleDateString()} · {doc.file_path.split('/').pop()}</p>
+                        </div>
+                        <Button variant="ghost" className="h-10 w-10 p-0 text-slate-500 hover:text-primary" onClick={() => handleView(doc)} aria-label={`Review ${doc.doc_type || 'document'} from ${new Date(doc.created_at).toLocaleDateString()}`}>
+                            <ExternalLink size={18} />
+                        </Button>
+                        <Button variant="ghost" className="h-10 w-10 p-0 text-slate-500 hover:text-red-600" onClick={() => handleDelete(doc.id, doc.file_path)} aria-label={`Delete ${doc.doc_type || 'document'} from ${new Date(doc.created_at).toLocaleDateString()}`}>
+                            <Trash2 size={18} />
+                        </Button>
+                    </li>
+                ))}
+            </ul>
+
+            <div className="hidden md:block bg-white rounded-lg border border-slate-200 overflow-hidden">
                 <div className="overflow-x-auto">
                     <table className="w-full text-left text-sm min-w-[600px]">
                         <thead className="bg-slate-50 border-b border-slate-200">
@@ -174,6 +199,7 @@ export function DocumentsPage() {
                                                 className="h-8 w-8 p-0 text-slate-500 hover:text-primary"
                                                 onClick={() => handleView(doc)}
                                                 title="View Document"
+                                                aria-label="View document"
                                             >
                                                 <ExternalLink size={16} />
                                             </Button>
@@ -182,6 +208,7 @@ export function DocumentsPage() {
                                                 className="h-8 w-8 p-0 text-slate-500 hover:text-red-600"
                                                 onClick={() => handleDelete(doc.id, doc.file_path)}
                                                 title="Delete Document"
+                                                aria-label="Delete document"
                                             >
                                                 <Trash2 size={16} />
                                             </Button>
