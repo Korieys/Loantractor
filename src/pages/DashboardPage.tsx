@@ -1,39 +1,49 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { FileUploader } from '../components/features/FileUploader';
 import { DocTypeSelector } from '../components/features/DocTypeSelector';
 import type { LoanDocType } from '../components/features/DocTypeSelector';
-import { MOCK_EXTRACTION_DATA } from '../data/mockExtraction';
-import { extractLoanData } from '../services/openai';
+import { extractLoanData, type ExtractedData } from '../services/openai';
 import { ExtractionViewer } from '../components/features/ExtractionViewer';
 import { ProcessingLoader } from '../components/features/ProcessingLoader';
 import { AnimatePresence, motion } from 'framer-motion';
 import { logger } from '../services/logger';
-import { supabase } from '../services/supabase';
+import { supabase, uploadDocument, updateDocument } from '../services/supabase';
 
 import { BatchQueue } from '../components/features/BatchQueue';
 import type { QueueItem } from '../components/features/BatchQueue';
 import { Button } from '../components/ui/Button';
 
-type AppState = 'IDLE' | 'SELECT_TYPE' | 'PROCESSING' | 'SAVING' | 'REVIEW' | 'ERROR' | 'BATCH_PREPARE' | 'BATCH_PROCESSING' | 'BATCH_COMPLETE';
+type AppState = 'IDLE' | 'SELECT_TYPE' | 'PROCESSING' | 'REVIEW' | 'ERROR' | 'BATCH_PREPARE' | 'BATCH_PROCESSING' | 'BATCH_COMPLETE';
 
 export function DashboardPage() {
     const [status, setStatus] = useState<AppState>('IDLE');
     // Single file flow state
     const [currentFile, setCurrentFile] = useState<File | null>(null);
     const [docType, setDocType] = useState<LoanDocType | null>(null);
-    const [extractedData, setExtractedData] = useState(MOCK_EXTRACTION_DATA);
+    const [extractedData, setExtractedData] = useState<ExtractedData[]>([]);
     const [isReanalyzing, setIsReanalyzing] = useState(false);
+    const [isSaving, setIsSaving] = useState(false);
 
     // Batch flow state
     const [queue, setQueue] = useState<QueueItem[]>([]);
-    const [batchDocType, setBatchDocType] = useState<LoanDocType | null>(null);
+    const [reviewQueueId, setReviewQueueId] = useState<string | null>(null);
+    const mounted = useRef(true);
+    const busy = useRef(false);
+    const singleSaveKey = useRef<string | null>(null);
+    useEffect(() => {
+        mounted.current = true;
+        return () => { mounted.current = false; };
+    }, []);
 
     const [errorMsg, setErrorMsg] = useState("");
 
     const handleFileUpload = (files: File[]) => {
         if (files.length === 0) return;
+        setReviewQueueId(null);
+        setErrorMsg('');
 
         if (files.length === 1) {
+            singleSaveKey.current = crypto.randomUUID();
             setCurrentFile(files[0]);
             setStatus('SELECT_TYPE');
         } else {
@@ -50,107 +60,117 @@ export function DashboardPage() {
 
     // Single file flow handlers
     const handleTypeSelect = async (type: LoanDocType) => {
+        if (busy.current || !currentFile) return;
+        busy.current = true;
         setDocType(type);
         setStatus('PROCESSING');
 
-        if (!currentFile) return;
-
         try {
             const data = await extractLoanData(currentFile, type);
+            if (!mounted.current) return;
             setExtractedData(data);
             setStatus('REVIEW');
         } catch (err) {
+            if (!mounted.current) return;
             logger.error(err);
-            setErrorMsg("Failed to process document. Please try again.");
+            setErrorMsg(err instanceof Error ? err.message : 'Failed to process document. Please try again.');
             setStatus('ERROR');
+        } finally {
+            busy.current = false;
         }
     };
 
-    const handleSave = async (data: typeof MOCK_EXTRACTION_DATA) => {
-        const { data: { session } } = await supabase.auth.getSession();
-
-        if (!session?.user || !currentFile || !docType) {
-            logger.error("Missing session or file data for save");
-            return;
-        }
-
+    const handleSave = async (data: ExtractedData[]) => {
+        if (busy.current) return;
+        busy.current = true;
+        setIsSaving(true);
+        setErrorMsg('');
         try {
-            setStatus('SAVING');
-            const { uploadDocument } = await import('../services/supabase');
-            await uploadDocument(currentFile, docType, data, session.user.id);
-
-            alert("Document saved successfully!");
-            reset();
+            if (!supabase) throw new Error('Saving is unavailable. Your edits are still here.');
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!mounted.current) return;
+            if (!session?.user) throw new Error('Please sign in again before saving. Your edits are still here.');
+            if (!currentFile || !docType) throw new Error('The source document is unavailable. Your edits have not been saved.');
+            const savedItem = reviewQueueId ? queue.find(item => item.id === reviewQueueId) : null;
+            if (reviewQueueId && !savedItem?.documentId) throw new Error('The saved document is unavailable. Please reopen it from Documents.');
+            if (savedItem?.documentId) {
+                await updateDocument(savedItem.documentId, data, docType);
+                if (!mounted.current) return;
+                updateQueueItem(savedItem.id, { result: data, docType });
+                setReviewQueueId(null);
+                setStatus('BATCH_COMPLETE');
+            } else {
+                singleSaveKey.current ??= crypto.randomUUID();
+                await uploadDocument(currentFile, docType, data, session.user.id, singleSaveKey.current);
+                if (!mounted.current) return;
+                alert('Document saved successfully!');
+                reset();
+            }
         } catch (err) {
+            if (!mounted.current) return;
             logger.error("Save failed:", err);
-            setErrorMsg("Failed to save document to Supabase.");
-            setStatus('ERROR');
+            setErrorMsg(err instanceof Error ? err.message : 'Your document was not saved. Your edits are still here; please retry.');
+        } finally {
+            busy.current = false;
+            if (mounted.current) setIsSaving(false);
         }
     };
 
     // Batch flow handlers
-    const startBatchProcessing = async () => {
-        // Validate
-        if (queue.some(i => !i.docType)) {
+    const startBatchProcessing = async (onlyId?: string) => {
+        if (busy.current) return;
+        const currentQueue = queue.filter(item => item.status !== 'COMPLETED' && (!onlyId || item.id === onlyId));
+        if (!currentQueue.length) return;
+        if (currentQueue.some(i => !i.docType)) {
             alert("Please select a document type for all files.");
             return;
         }
-
+        busy.current = true;
         setStatus('BATCH_PROCESSING');
-
-        // We need to process sequentially to not hit rate limits and for better UX
-        // Note: In a real app we might do small chunks of concurrency
-
-        let currentQueue = [...queue];
-
-        for (let i = 0; i < currentQueue.length; i++) {
-            if (currentQueue[i].status === 'COMPLETED') continue;
-
-            // Re-check updated state in case user modified something while loop was running? 
-            // In React state snapshot, 'queue' inside this function is stale. 
-            // We should trust 'currentQueue' derived from start but 'docType' must be captured.
-            // Ideally we'd use a reducer or careful effect, but for now we assume types are set.
-            const item = currentQueue[i];
+        for (const item of currentQueue) {
+            if (!mounted.current) break;
             const type = item.docType!;
-
-            // Update status to processing
-            updateQueueItem(item.id, { status: 'PROCESSING' });
+            updateQueueItem(item.id, { status: 'PROCESSING', error: undefined });
 
             try {
-                // 1. Extract
-                const data = await extractLoanData(item.file, type);
-
-                // 2. Auto-save (Batch mode = Auto-save for now)
+                // A failed save can reuse its successful extraction instead of charging for it again.
+                const data = item.result ?? await extractLoanData(item.file, type);
+                if (!mounted.current) break;
+                updateQueueItem(item.id, { result: data });
+                if (!supabase) throw new Error('Saving is unavailable. Your document has not been saved.');
                 const { data: { session } } = await supabase.auth.getSession();
-                if (session?.user) {
-                    const { uploadDocument } = await import('../services/supabase');
-                    await uploadDocument(item.file, type, data, session.user.id);
-                }
+                if (!mounted.current) break;
+                if (!session?.user) throw new Error('Sign in again before saving. This document has not been saved.');
+                const saveKey = item.saveKey ?? crypto.randomUUID();
+                updateQueueItem(item.id, { saveKey });
+                const saved = await uploadDocument(item.file, type, data, session.user.id, saveKey);
+                if (!mounted.current) break;
 
                 updateQueueItem(item.id, {
                     status: 'COMPLETED',
-                    result: data
+                    result: data,
+                    documentId: saved.id
                 });
 
             } catch (err) {
-                console.error(err);
+                if (!mounted.current) break;
+                logger.error('Batch document failed:', err);
                 updateQueueItem(item.id, {
                     status: 'ERROR',
                     error: err instanceof Error ? err.message : 'Unknown error'
                 });
             }
 
-            // Refresh local queue ref for next iteration in case of UI updates (though we use functional updates typically, 
-            // here we are in a loop. Better to just continue with our local copy logic but we need to ensure state is synced if user cancels)
-            // For simplicity in this loop, we just proceed.
         }
-
-        setStatus('BATCH_COMPLETE');
+        busy.current = false;
+        if (mounted.current) setStatus('BATCH_COMPLETE');
     };
 
     const handleViewQueueResult = (item: QueueItem) => {
-        if (!item.result || !item.docType) return;
+        if (busy.current || !item.result || !item.docType || !item.documentId) return;
 
+        setReviewQueueId(item.id);
+        setErrorMsg('');
         setCurrentFile(item.file);
         setDocType(item.docType as LoanDocType);
         setExtractedData(item.result);
@@ -172,39 +192,36 @@ export function DashboardPage() {
         setStatus('IDLE');
         setCurrentFile(null);
         setDocType(null);
-        setExtractedData(MOCK_EXTRACTION_DATA);
+        setExtractedData([]);
         setQueue([]);
-        setBatchDocType(null);
+        setReviewQueueId(null);
         setErrorMsg("");
+        singleSaveKey.current = null;
     };
 
     const handleReanalyze = async (newType: LoanDocType) => {
-        if (!currentFile) return;
+        if (!currentFile || busy.current) return;
 
+        busy.current = true;
+        setErrorMsg('');
         setIsReanalyzing(true);
         try {
             // Re-extract data with new type
             const data = await extractLoanData(currentFile, newType);
+            if (!mounted.current) return;
 
             // Update local state
             setExtractedData(data);
             setDocType(newType);
 
-            // Update queue item if part of a batch
-            if (queue.length > 0) {
-                const queueItemIndex = queue.findIndex(i => i.file === currentFile);
-                if (queueItemIndex >= 0) {
-                    updateQueueItem(queue[queueItemIndex].id, {
-                        docType: newType,
-                        result: data
-                    });
-                }
-            }
+            // A batch item keeps its last saved values until Save confirms the update.
         } catch (error) {
-            console.error("Reanalysis failed:", error);
-            alert("Failed to reanalyze document. Please try again.");
+            if (!mounted.current) return;
+            logger.error('Reanalysis failed:', error);
+            setErrorMsg('Reanalysis failed. Your previous fields are still here; please retry.');
         } finally {
-            setIsReanalyzing(false);
+            busy.current = false;
+            if (mounted.current) setIsReanalyzing(false);
         }
     };
 
@@ -216,7 +233,6 @@ export function DashboardPage() {
                         {status === 'IDLE' && "New Extraction"}
                         {status === 'SELECT_TYPE' && "Classify Document"}
                         {status === 'PROCESSING' && "Processing Document"}
-                        {status === 'SAVING' && "Saving Data"}
                         {status === 'REVIEW' && (docType ? `Review ${docType} Data` : "Review Data")}
                         {status === 'ERROR' && "Processing Error"}
                         {(status === 'BATCH_PREPARE' || status === 'BATCH_PROCESSING' || status === 'BATCH_COMPLETE') && "Batch Processing"}
@@ -225,9 +241,9 @@ export function DashboardPage() {
                         {status === 'IDLE' && "Upload borrower documents to automatically extract data."}
                         {status === 'SELECT_TYPE' && "Select the type of document you uploaded."}
                         {status === 'BATCH_PREPARE' && "Configure your batch upload."}
-                        {status === 'BATCH_PROCESSING' && `Processing your ${batchDocType} queue...`}
-                        {status === 'BATCH_COMPLETE' && "Batch processing complete."}
-                        {(status === 'PROCESSING' || status === 'SAVING') && "Please wait while we process your request..."}
+                        {status === 'BATCH_PROCESSING' && 'Processing your document queue…'}
+                        {status === 'BATCH_COMPLETE' && (queue.some(item => item.status === 'ERROR') ? 'Processing finished with failed documents. Retry them below.' : 'Documents saved. Review the extracted values before use.')}
+                        {status === 'PROCESSING' && 'Please wait while we process your request…'}
                     </p>
                 </div>
             </header>
@@ -267,11 +283,11 @@ export function DashboardPage() {
                             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-slate-50 p-4 rounded-lg border border-slate-200">
                                 <div>
                                     <h4 className="font-semibold text-slate-900">Configure Batch Upload</h4>
-                                    <p className="text-sm text-slate-500">Assign a document type to each file before processing.</p>
+                                    <p className="text-sm text-slate-500">Assign a type to each file. Batch processing automatically saves draft fields for your review.</p>
                                 </div>
                                 <div className="flex gap-2">
                                     <Button
-                                        onClick={startBatchProcessing}
+                                        onClick={() => startBatchProcessing()}
                                         disabled={queue.some(i => !i.docType)}
                                         className="w-full sm:w-auto"
                                     >
@@ -284,9 +300,9 @@ export function DashboardPage() {
                         <BatchQueue
                             items={queue}
                             onRemove={removeFromQueue}
-                            onRetry={(id) => updateQueueItem(id, { status: 'PENDING', error: undefined })}
+                            onRetry={id => startBatchProcessing(id)}
                             onClearCompleted={() => setQueue(prev => prev.filter(i => i.status !== 'COMPLETED'))}
-                            onTypeSelect={(id, type) => updateQueueItem(id, { docType: type })}
+                            onTypeSelect={(id, type) => updateQueueItem(id, { docType: type, result: undefined })}
                             onViewResult={handleViewQueueResult}
                             isProcessing={status === 'BATCH_PROCESSING'}
                         />
@@ -299,14 +315,14 @@ export function DashboardPage() {
                     </motion.div>
                 )}
 
-                {(status === 'PROCESSING' || status === 'SAVING') && (
+                {status === 'PROCESSING' && (
                     <motion.div
                         key="processing"
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
                     >
-                        <ProcessingLoader mode={status === 'SAVING' ? 'saving' : 'analyzing'} />
+                        <ProcessingLoader mode="analyzing" />
                     </motion.div>
                 )}
 
@@ -317,12 +333,14 @@ export function DashboardPage() {
                         animate={{ opacity: 1, scale: 1 }}
                         className="h-full"
                     >
+                        {errorMsg && <p role="alert" className="mb-4 text-red-700">{errorMsg}</p>}
                         <ExtractionViewer
                             data={extractedData}
                             file={currentFile}
                             onSave={handleSave}
                             onReanalyze={handleReanalyze}
                             isProcessing={isReanalyzing}
+                            isSaving={isSaving}
                             onCancel={() => {
                                 // If we came from batch, return to batch view if items remain
                                 if (queue.length > 0) {

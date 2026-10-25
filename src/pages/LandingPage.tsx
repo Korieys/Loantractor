@@ -1,21 +1,17 @@
 import { Button } from "../components/ui/Button";
 import { ArrowRight, Shield, Zap, FileText, Sparkles, BrainCircuit } from 'lucide-react';
-import { motion, useScroll, useTransform } from 'framer-motion';
-import { useRef } from "react";
+import { motion } from 'framer-motion';
+import { useState } from "react";
+import { ACCOUNT_UNAVAILABLE } from '../services/supabase';
 
 interface LandingPageProps {
     onLogin: () => void;
+    accountsAvailable?: boolean;
+    sessionError?: string;
 }
 
-export function LandingPage({ onLogin }: LandingPageProps) {
-    const targetRef = useRef(null);
-    const { scrollYProgress } = useScroll({
-        target: targetRef,
-        offset: ["start start", "end start"]
-    });
-
-    const opacity = useTransform(scrollYProgress, [0, 0.5], [1, 0]);
-    const scale = useTransform(scrollYProgress, [0, 0.5], [1, 0.9]);
+export function LandingPage({ onLogin, accountsAvailable = true, sessionError = '' }: LandingPageProps) {
+    const [showSample, setShowSample] = useState(false);
 
     return (
         <div className="min-h-screen bg-[#020617] font-sans text-slate-100 overflow-x-hidden selection:bg-primary/30">
@@ -28,19 +24,19 @@ export function LandingPage({ onLogin }: LandingPageProps) {
                         </div>
                         <span className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-slate-400 tracking-tight">Parseon</span>
                     </div>
-                    <div className="flex items-center gap-6">
-                        <button onClick={onLogin} className="text-sm font-medium text-slate-400 hover:text-white transition-colors">
+                    <div className="flex items-center gap-3 sm:gap-6 pl-3 shrink-0">
+                        <button onClick={onLogin} className="hidden sm:inline-flex text-sm font-medium text-slate-400 hover:text-white transition-colors">
                             Log in
                         </button>
                         <Button onClick={onLogin} size="sm" className="bg-white text-slate-900 hover:bg-slate-200 border-none">
-                            Get Started
+                            {accountsAvailable ? 'Get Started' : 'Preview access'}
                         </Button>
                     </div>
                 </div>
             </nav>
 
             {/* Hero Section */}
-            <div ref={targetRef} className="relative pt-32 pb-20 lg:pt-48 lg:pb-32 overflow-hidden">
+            <div className="relative pt-32 pb-20 lg:pt-48 lg:pb-32 overflow-hidden">
                 {/* Background Blobs */}
                 <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full h-full z-0 overflow-hidden pointer-events-none">
                     <motion.div
@@ -58,7 +54,6 @@ export function LandingPage({ onLogin }: LandingPageProps) {
                 </div>
 
                 <motion.div
-                    style={{ opacity, scale }}
                     className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10 text-center"
                 >
                     <motion.div
@@ -68,7 +63,7 @@ export function LandingPage({ onLogin }: LandingPageProps) {
                         className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-violet-500/30 bg-violet-500/10 text-violet-300 text-sm font-medium mb-8 backdrop-blur-sm"
                     >
                         <Sparkles size={14} className="text-amber-400" />
-                        <span>Powered by GPT-4o Vision</span>
+                        <span>AI-assisted document extraction</span>
                     </motion.div>
 
                     <h1 className="text-4xl sm:text-5xl md:text-7xl lg:text-8xl font-extrabold tracking-tight mb-8">
@@ -84,8 +79,8 @@ export function LandingPage({ onLogin }: LandingPageProps) {
                         transition={{ duration: 0.6, delay: 0.2 }}
                         className="text-lg md:text-xl text-slate-400 max-w-2xl mx-auto mb-12 leading-relaxed"
                     >
-                        Parseon turns messy documents into structured data instantly.
-                        No templates, no training—just upload and get pure JSON.
+                        Turn documents into structured fields you can review, correct, and export.
+                        Check every result against the original before using it.
                     </motion.p>
 
                     <motion.div
@@ -95,17 +90,25 @@ export function LandingPage({ onLogin }: LandingPageProps) {
                         className="flex flex-col sm:flex-row items-center justify-center gap-4"
                     >
                         <Button
-                            onClick={onLogin}
+                            onClick={accountsAvailable ? onLogin : () => setShowSample(true)}
                             size="lg"
                             className="h-14 px-8 text-lg bg-violet-600 hover:bg-violet-700 shadow-xl shadow-violet-500/20 border-none ring-offset-2 ring-offset-[#020617] transition-all hover:scale-105"
                         >
-                            Start Extraction
+                            {accountsAvailable ? 'Start Extraction' : 'Explore the sample'}
                             <ArrowRight className="ml-2 w-5 h-5" />
                         </Button>
-                        <button onClick={onLogin} className="group flex items-center gap-2 text-slate-400 hover:text-white px-6 py-3 transition-colors">
+                        <button onClick={() => setShowSample(value => !value)} aria-expanded={showSample} aria-controls="output-sample" className="group flex items-center gap-2 text-slate-400 hover:text-white px-6 py-3 transition-colors">
                             <span className="border-b border-transparent group-hover:border-white transition-all">View Output Sample</span>
                         </button>
                     </motion.div>
+                    {!accountsAvailable && <p role="status" className="mt-6 mx-auto max-w-2xl text-slate-300">{ACCOUNT_UNAVAILABLE}</p>}
+                    {sessionError && <p role="alert" className="mt-6 mx-auto max-w-2xl text-amber-300">{sessionError}</p>}
+                    {showSample && <section id="output-sample" aria-label="Synthetic output sample" className="mt-8 mx-auto max-w-2xl rounded-xl border border-violet-500/30 bg-slate-950 p-6 text-left">
+                        <h2 className="text-xl font-bold mb-2">Example output</h2>
+                        <p className="text-slate-400 mb-4">Fictional data for illustration. This sample does not upload a document or run an extraction.</p>
+                        <pre className="overflow-x-auto text-sm text-violet-200" tabIndex={0} aria-label="Sample JSON output">{JSON.stringify({ document_type: 'Sample invoice', supplier: 'Example Studio', invoice_number: 'DEMO-001', currency: 'USD', total: '125.00' }, null, 2)}</pre>
+                        <p className="mt-4 text-sm text-slate-400">Real results depend on document quality and require your review.</p>
+                    </section>}
                 </motion.div>
 
                 {/* Floating UI Mockup */}
@@ -161,24 +164,24 @@ export function LandingPage({ onLogin }: LandingPageProps) {
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                     <div className="text-center mb-16">
                         <h2 className="text-3xl md:text-5xl font-bold mb-4 text-white">Why Parseon?</h2>
-                        <p className="text-slate-400 text-lg max-w-2xl mx-auto">Built for heavy-duty financial processing with a level of precision typical OCR can't match.</p>
+                        <p className="text-slate-400 text-lg max-w-2xl mx-auto">A workflow for extracting fields, reviewing the source, and preparing structured output.</p>
                     </div>
 
                     <div className="grid md:grid-cols-3 gap-8">
                         <FeatureCard
                             icon={<Zap className="w-6 h-6 text-amber-400" />}
-                            title="Zero-Shot Extraction"
-                            desc="No training required. Provide any document type, and our semantic engine understands the context immediately."
+                            title="Document extraction"
+                            desc="Choose a supported document type and extract a draft set of fields for review."
                         />
                         <FeatureCard
                             icon={<Shield className="w-6 h-6 text-emerald-400" />}
-                            title="SOC2 Ready Security"
-                            desc="Your data is encrypted, processed in a secure enclave, and wiped after processing unless saved by you."
+                            title="Review before use"
+                            desc="Compare extracted fields with the original document and correct them before saving or exporting."
                         />
                         <FeatureCard
                             icon={<BrainCircuit className="w-6 h-6 text-violet-400" />}
-                            title="Reasoning Engine"
-                            desc="Parseon doesn't just read text; it understands it. It corrects OCR errors using financial context."
+                            title="Structured output"
+                            desc="Export reviewed fields as JSON or CSV for the next step in your workflow."
                         />
                     </div>
                 </div>

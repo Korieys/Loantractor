@@ -14,23 +14,37 @@ import { SettingsPage } from './pages/SettingsPage';
 
 function App() {
   const [session, setSession] = useState<Session | null>(null);
-  const [isLoadingSession, setIsLoadingSession] = useState(true);
+  const [isLoadingSession, setIsLoadingSession] = useState(Boolean(supabase));
+  const [sessionError, setSessionError] = useState('');
   const [showAuth, setShowAuth] = useState(false);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    if (!supabase) return;
+    let active = true;
+    let authChanged = false;
+    supabase.auth.getSession().then(({ data: { session }, error }) => {
+      if (!active || authChanged) return;
+      if (error) throw error;
       setSession(session);
+    }).catch(() => {
+      if (active && !authChanged) setSessionError('We could not restore your session. Please sign in again.');
+    }).finally(() => {
+      if (!active) return;
       setIsLoadingSession(false);
     });
 
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!active) return;
+      authChanged = true;
       setSession(session);
+      setSessionError('');
+      setIsLoadingSession(false);
       if (session) setShowAuth(false);
     });
 
-    return () => subscription.unsubscribe();
+    return () => { active = false; subscription.unsubscribe(); };
   }, []);
 
   if (isLoadingSession) {
@@ -49,19 +63,19 @@ function App() {
           </button>
           <div className="w-full max-w-md space-y-8">
             <div className="text-center">
-              <h1 className="text-4xl font-extrabold text-blue-900 tracking-tight">Loantractor</h1>
-              <p className="text-slate-500 mt-2">Sign in to your dashboard</p>
+              <h1 className="text-4xl font-extrabold text-blue-900 tracking-tight">Parseon</h1>
+              <p className="text-slate-500 mt-2">{supabase ? 'Sign in to your dashboard' : 'Explore the public preview'}</p>
             </div>
             <AuthForm onSuccess={() => { }} />
           </div>
         </div>
       );
     }
-    return <LandingPage onLogin={() => setShowAuth(true)} />;
+    return <LandingPage onLogin={() => setShowAuth(true)} accountsAvailable={Boolean(supabase)} sessionError={sessionError} />;
   }
 
   return (
-    <DashboardLayout>
+    <DashboardLayout key={session.user.id}>
       <Routes>
         <Route path="/" element={<DashboardPage />} />
         <Route path="/documents" element={<DocumentsPage />} />

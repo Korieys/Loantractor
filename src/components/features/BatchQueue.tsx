@@ -3,12 +3,16 @@ import { Card } from '../ui/Card'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Button } from '../ui/Button'
 import type { LoanDocType } from './DocTypeSelector'
+import type { ExtractedData } from '../../services/openai'
 
 export interface QueueItem {
     id: string
     file: File
     status: 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'ERROR'
-    result?: any
+    result?: ExtractedData[]
+    documentId?: string
+    /** Reused by every save retry so an unconfirmed save cannot create a duplicate. */
+    saveKey?: string
     error?: string
     docType?: LoanDocType
 }
@@ -70,9 +74,8 @@ export function BatchQueue({ items, onRemove, onRetry, onClearCompleted, onTypeS
                             exit={{ opacity: 0, scale: 0.95 }}
                         >
                             <Card className={
-                                `p-3 flex flex-col sm:flex-row sm:items-center gap-4 bg-white border-slate-200 shadow-sm relative overflow-hidden ${item.status === 'COMPLETED' ? 'hover:border-green-200 cursor-pointer transition-colors' : ''}`
+                                'p-3 flex flex-col sm:flex-row sm:items-center gap-4 bg-white border-slate-200 shadow-sm relative overflow-hidden'
                             }
-                                onClick={() => item.status === 'COMPLETED' && onViewResult(item)}
                             >
                                 {/* Loading Bar */}
                                 {item.status === 'PROCESSING' && (
@@ -117,6 +120,7 @@ export function BatchQueue({ items, onRemove, onRetry, onClearCompleted, onTypeS
                                     {(item.status === 'PENDING' || item.status === 'ERROR') && (
                                         <div className="relative">
                                             <select
+                                                aria-label={`Document type for ${item.file.name}`}
                                                 value={item.docType || ''}
                                                 onChange={(e) => onTypeSelect(item.id, e.target.value as LoanDocType)}
                                                 disabled={isProcessing}
@@ -140,7 +144,7 @@ export function BatchQueue({ items, onRemove, onRetry, onClearCompleted, onTypeS
                                             <span className="text-xs font-medium px-2 py-1 bg-green-50 text-green-700 rounded-md border border-green-100">
                                                 {item.docType}
                                             </span>
-                                            <Button variant="ghost" size="sm" onClick={() => onViewResult(item)} className="h-8 text-slate-500 hover:text-primary gap-1">
+                                            <Button variant="ghost" size="sm" disabled={isProcessing} aria-label={`Review ${item.file.name}`} onClick={() => onViewResult(item)} className="h-8 text-slate-500 hover:text-primary gap-1">
                                                 <Eye size={14} /> Review
                                             </Button>
                                         </div>
@@ -148,7 +152,7 @@ export function BatchQueue({ items, onRemove, onRetry, onClearCompleted, onTypeS
 
                                     {/* Actions */}
                                     {item.status === 'ERROR' && !isProcessing && (
-                                        <Button variant="ghost" size="sm" onClick={() => onRetry(item.id)} className="h-8 text-slate-500 hover:text-primary">
+                                        <Button variant="ghost" size="sm" disabled={!item.docType} aria-label={`Retry ${item.file.name}`} onClick={() => onRetry(item.id)} className="h-8 text-slate-500 hover:text-primary">
                                             Retry
                                         </Button>
                                     )}
@@ -159,6 +163,7 @@ export function BatchQueue({ items, onRemove, onRetry, onClearCompleted, onTypeS
                                             className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-md transition-colors"
                                             disabled={isProcessing}
                                             title="Remove from queue"
+                                            aria-label={`Remove ${item.file.name} from queue`}
                                         >
                                             <XCircle size={18} />
                                         </button>

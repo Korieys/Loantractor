@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { supabase } from '../../services/supabase'
+import { supabase, ACCOUNT_UNAVAILABLE } from '../../services/supabase'
 import { Button } from '../ui/Button'
 import { Input } from '../ui/Input'
 import { Card } from '../ui/Card'
@@ -22,6 +22,7 @@ export function AuthForm({ onSuccess }: AuthFormProps) {
         setError(null)
 
         try {
+            if (!supabase) throw new Error(ACCOUNT_UNAVAILABLE);
             if (isLogin) {
                 const { error } = await supabase.auth.signInWithPassword({
                     email,
@@ -42,6 +43,13 @@ export function AuthForm({ onSuccess }: AuthFormProps) {
         } finally {
             setLoading(false)
         }
+    }
+
+    if (!supabase) {
+        return <Card className="w-full max-w-md mx-auto p-6 bg-white border-slate-200">
+            <h2 className="text-xl font-bold text-slate-800 mb-3">Account features unavailable</h2>
+            <p role="status" className="text-slate-600">{ACCOUNT_UNAVAILABLE}</p>
+        </Card>;
     }
 
     return (

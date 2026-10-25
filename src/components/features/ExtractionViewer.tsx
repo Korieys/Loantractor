@@ -1,10 +1,11 @@
 
-import { useState, useRef, useMemo } from 'react'
+import { useState, useRef, useMemo, useEffect } from 'react'
 import { Edit2, AlertCircle, Copy, Check, ZoomIn, ZoomOut, RotateCcw, FileCode, FileText, AlertTriangle, RefreshCw } from 'lucide-react'
 import { Button } from '../ui/Button'
 import { Card, CardHeader, CardTitle, CardContent } from '../ui/Card'
 import { Input } from '../ui/Input'
 import { validateExtraction } from '../../services/validation'
+import { extractionCsv } from '../../services/export'
 import type { LoanDocType } from './DocTypeSelector'
 
 // Mock interface for extraction data
@@ -18,16 +19,19 @@ interface ExtractionViewerProps {
     data: ExtractedData[]
     file: File | null
     fileUrl?: string // Optional direct URL support
+    fileName?: string
     onSave: (data: ExtractedData[]) => void
     onCancel: () => void
     onReanalyze?: (newType: LoanDocType) => void
     isProcessing?: boolean
+    isSaving?: boolean
 }
 
 const DOC_TYPES: LoanDocType[] = ['Pay Stub', 'Bank Statement', 'Tax Return', 'Loan Application', 'Other'];
 
-export function ExtractionViewer({ data: initialData, file, fileUrl: initialFileUrl, onSave, onCancel, onReanalyze, isProcessing = false }: ExtractionViewerProps) {
+export function ExtractionViewer({ data: initialData, file, fileUrl: initialFileUrl, fileName, onSave, onCancel, onReanalyze, isProcessing = false, isSaving = false }: ExtractionViewerProps) {
     const [data, setData] = useState(initialData)
+    const [previousData, setPreviousData] = useState(initialData)
     const [zoom, setZoom] = useState(1)
     const [pan, setPan] = useState({ x: 0, y: 0 })
     const [isDragging, setIsDragging] = useState(false)
@@ -39,9 +43,10 @@ export function ExtractionViewer({ data: initialData, file, fileUrl: initialFile
     const imageRef = useRef<HTMLDivElement>(null)
 
     // Sync data if props change (e.g. after re-analysis)
-    useMemo(() => {
+    if (previousData !== initialData) {
+        setPreviousData(initialData);
         setData(initialData);
-    }, [initialData]);
+    }
 
     // Run validation on data change
     const validationResult = useMemo(() => validateExtraction(data), [data])
@@ -69,10 +74,8 @@ export function ExtractionViewer({ data: initialData, file, fileUrl: initialFile
             mimeType = 'application/json'
             extension = 'json'
         } else {
-            const headers = ['Field', 'Value', 'Confidence']
-            const rows = data.map(item => `"${item.field}","${item.value}","${item.confidence}"`)
-            content = [headers.join(','), ...rows].join('\n')
-            mimeType = 'text/csv'
+            content = extractionCsv(data)
+            mimeType = 'text/csv;charset=utf-8'
             extension = 'csv'
         }
 
@@ -84,6 +87,7 @@ export function ExtractionViewer({ data: initialData, file, fileUrl: initialFile
         document.body.appendChild(link)
         link.click()
         document.body.removeChild(link)
+        setTimeout(() => URL.revokeObjectURL(url), 1000)
     }
 
     // Zoom/Pan logic
@@ -105,16 +109,19 @@ export function ExtractionViewer({ data: initialData, file, fileUrl: initialFile
     }
 
     // Use passed URL or create object URL from file
-    const previewUrl = useMemo(() => {
-        if (initialFileUrl) return initialFileUrl;
-        if (file) return URL.createObjectURL(file);
-        return null;
+    const [localPreview, setLocalPreview] = useState<string | null>(null);
+    useEffect(() => {
+        if (!file || initialFileUrl) return;
+        const url = URL.createObjectURL(file);
+        // Allocate browser resources after commit, so abandoned renders cannot leak file URLs.
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setLocalPreview(url);
+        return () => URL.revokeObjectURL(url);
     }, [file, initialFileUrl]);
-
-    // Determine mime or type for preview logic
-    const isImage = file ? file.type.startsWith('image/') : (previewUrl ? true : false); // Assume URL is image for now or rely on file extension logic if needed. 
-    // Ideally we'd know the type. For Signed URLs from Supabase, they are usually images or PDFs.
-    // Let's assume image for simple viewer unless file type is known.
+    const previewUrl = initialFileUrl || (file ? localPreview : null);
+    const name = file?.name || fileName || 'Document';
+    const isPdf = file?.type === 'application/pdf' || /\.pdf$/i.test(name);
+    const isImage = file ? file.type.startsWith('image/') : /\.(png|jpe?g|webp)$/i.test(name);
 
     return (
         <div className="flex flex-col lg:grid lg:grid-cols-2 gap-6 lg:h-[calc(100vh-140px)] relative">
@@ -122,7 +129,8 @@ export function ExtractionViewer({ data: initialData, file, fileUrl: initialFile
             <Card className="h-[50vh] lg:h-full flex flex-col overflow-hidden bg-slate-800 border-slate-700 relative group flex-shrink-0">
                 <CardHeader className="bg-slate-900/50 py-3 px-4 border-b border-slate-700 flex-shrink-0 z-10 w-full">
                     <CardTitle className="text-slate-200 text-sm flex items-center justify-between w-full">
-                        <span className="truncate mr-2">{file?.name || "Document Preview"}</span>
+                        <span className="truncate mr-2">{name}</span>
+                        {isImage && (
                         <div className="flex items-center gap-1 bg-slate-800/80 rounded-md p-0.5">
                             <button onClick={() => setZoom(z => Math.max(0.5, z - 0.2))} className="p-1.5 hover:bg-slate-700 rounded text-slate-300 transition-colors" title="Zoom Out"><ZoomOut size={16} /></button>
                             <span className="text-xs text-slate-400 w-10 text-center font-mono">{Math.round(zoom * 100)}%</span>
@@ -130,6 +138,7 @@ export function ExtractionViewer({ data: initialData, file, fileUrl: initialFile
                             <div className="w-px h-4 bg-slate-700 mx-1"></div>
                             <button onClick={resetZoom} className="p-1.5 hover:bg-slate-700 rounded text-slate-300 transition-colors" title="Reset View"><RotateCcw size={16} /></button>
                         </div>
+                        )}
                     </CardTitle>
                 </CardHeader>
                 <div
@@ -140,7 +149,14 @@ export function ExtractionViewer({ data: initialData, file, fileUrl: initialFile
                     onMouseLeave={handleMouseUp}
                     ref={imageRef}
                 >
-                    {isImage ? (
+                    {isPdf && previewUrl ? (
+                        <div className="h-full flex flex-col">
+                            <a href={previewUrl} target="_blank" rel="noopener noreferrer" className="p-2 text-sm text-blue-300 underline">Open PDF in a new tab</a>
+                            <object data={previewUrl} type="application/pdf" aria-label={`${name} PDF preview`} className="w-full flex-1 min-h-0">
+                                <p className="p-4 text-slate-300">Use “Open PDF in a new tab” if this browser cannot display the preview.</p>
+                            </object>
+                        </div>
+                    ) : isImage && previewUrl ? (
                         <div
                             className="w-full h-full flex items-center justify-center pointer-events-none"
                             style={{
@@ -148,7 +164,7 @@ export function ExtractionViewer({ data: initialData, file, fileUrl: initialFile
                                 transition: isDragging ? 'none' : 'transform 0.2s ease-out'
                             }}
                         >
-                            <img src={previewUrl!} alt="Doc" className="max-w-none shadow-lg" />
+                            <img src={previewUrl} alt={`${name} original document`} className="max-w-none shadow-lg" />
                         </div>
                     ) : (
                         <div className="text-slate-500 flex flex-col items-center justify-center h-full">
@@ -172,7 +188,7 @@ export function ExtractionViewer({ data: initialData, file, fileUrl: initialFile
                                 </span>
                             )}
                         </div>
-                        <div className="flex items-center gap-2 self-end sm:self-auto">
+                        <div className="flex flex-wrap items-center gap-2 sm:justify-end">
                             {onReanalyze && (
                                 <div className="relative">
                                     <Button
@@ -180,14 +196,14 @@ export function ExtractionViewer({ data: initialData, file, fileUrl: initialFile
                                         size="sm"
                                         onClick={() => setShowReanalyze(!showReanalyze)}
                                         className="gap-2 text-blue-600 border-blue-200 hover:bg-blue-50"
-                                        disabled={isProcessing}
+                                        disabled={isProcessing || isSaving}
                                     >
                                         <RefreshCw size={14} className={isProcessing ? 'animate-spin' : ''} />
                                         {isProcessing ? 'Processing...' : 'Reanalyze'}
                                     </Button>
 
                                     {showReanalyze && (
-                                        <div className="absolute top-full mt-2 right-0 bg-white border border-slate-200 shadow-xl rounded-lg p-3 w-64 z-50 animate-in fade-in slide-in-from-top-2">
+                                        <div className="absolute top-full mt-2 left-0 sm:left-auto sm:right-0 bg-white border border-slate-200 shadow-xl rounded-lg p-3 w-64 z-50 animate-in fade-in slide-in-from-top-2">
                                             <p className="text-xs font-semibold text-slate-500 mb-2">Select Correct Document Type:</p>
                                             <div className="flex flex-col space-y-1">
                                                 {DOC_TYPES.map(type => (
@@ -210,24 +226,24 @@ export function ExtractionViewer({ data: initialData, file, fileUrl: initialFile
                                 </div>
                             )}
 
-                            <div className="flex bg-slate-100 rounded-lg p-1 mr-2">
+                            <div className="flex bg-slate-100 rounded-lg p-1">
                                 <button onClick={() => {
                                     const allText = data.map(i => `${i.field}: ${i.value}`).join('\n')
                                     navigator.clipboard.writeText(allText)
                                     alert("All extracted data copied to clipboard!")
-                                }} className="p-1.5 hover:bg-white rounded-md text-slate-500 hover:text-slate-700 shadow-sm transition-all" title="Copy All to Clipboard">
+                                }} className="p-2 sm:p-1.5 hover:bg-white rounded-md text-slate-500 hover:text-slate-700 shadow-sm transition-all" title="Copy All to Clipboard" aria-label="Copy all fields">
                                     <Copy size={16} />
                                 </button>
-                                <button onClick={() => handleExport('csv')} className="p-1.5 hover:bg-white rounded-md text-slate-500 hover:text-slate-700 shadow-sm transition-all" title="Export to CSV">
+                                <button onClick={() => handleExport('csv')} className="p-2 sm:p-1.5 hover:bg-white rounded-md text-slate-500 hover:text-slate-700 shadow-sm transition-all" title="Export to CSV" aria-label="Export CSV">
                                     <FileText size={16} />
                                 </button>
-                                <button onClick={() => handleExport('json')} className="p-1.5 hover:bg-white rounded-md text-slate-500 hover:text-slate-700 shadow-sm transition-all" title="Export to JSON">
+                                <button onClick={() => handleExport('json')} className="p-2 sm:p-1.5 hover:bg-white rounded-md text-slate-500 hover:text-slate-700 shadow-sm transition-all" title="Export to JSON" aria-label="Export JSON">
                                     <FileCode size={16} />
                                 </button>
                             </div>
-                            <Button variant="outline" size="sm" onClick={onCancel}>Cancel</Button>
-                            <Button size="sm" onClick={() => onSave(data)} className="gap-2">
-                                Save
+                            <Button variant="outline" size="sm" onClick={onCancel} disabled={isSaving || isProcessing}>Cancel</Button>
+                            <Button size="sm" onClick={() => onSave(data)} disabled={isSaving || isProcessing} aria-busy={isSaving} className="gap-2">
+                                {isSaving ? 'Saving…' : 'Save'}
                             </Button>
                         </div>
                     </CardTitle>
@@ -256,7 +272,7 @@ export function ExtractionViewer({ data: initialData, file, fileUrl: initialFile
                                 )}>
                                     <div className="flex items-center justify-between mb-1">
                                         <div className="flex items-center gap-2">
-                                            <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">{item.field}</label>
+                                            <label htmlFor={`extracted-field-${index}`} className="text-xs font-semibold text-slate-500 uppercase tracking-wider">{item.field}</label>
                                             {fieldError && (
                                                 <span className={cn(
                                                     "text-[10px] flex items-center gap-1",
@@ -269,14 +285,16 @@ export function ExtractionViewer({ data: initialData, file, fileUrl: initialFile
                                         </div>
                                         <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${item.confidence > 0.9 ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
                                             }`}>
-                                            {Math.round(item.confidence * 100)}% Match
+                                            {Math.round(item.confidence * 100)}% AI confidence
                                         </span>
                                     </div>
 
                                     <div className="relative flex items-center gap-2">
                                         <div className="relative flex-1">
                                             <Input
+                                                id={`extracted-field-${index}`}
                                                 value={item.value}
+                                                disabled={isSaving || isProcessing}
                                                 onChange={(e) => handleFieldChange(index, e.target.value)}
                                                 className={cn(
                                                     "transition-all font-medium text-slate-900 pr-8",
